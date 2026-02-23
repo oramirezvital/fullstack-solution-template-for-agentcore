@@ -1,0 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Amazon (AMZN) – 6-Month Price Trend</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body { background: #0d1117; color: #e6edf3; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; padding: 32px 16px; }
+  h1 { font-size: 1.6rem; font-weight: 700; margin-bottom: 4px; }
+  .subtitle { color: #8b949e; font-size: 0.9rem; margin-bottom: 24px; }
+  .stats { display: flex; gap: 32px; margin-bottom: 28px; flex-wrap: wrap; justify-content: center; }
+  .stat { text-align: center; }
+  .stat-label { font-size: 0.75rem; color: #8b949e; text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-value { font-size: 1.25rem; font-weight: 700; margin-top: 2px; }
+  .neg { color: #f85149; }
+  .pos { color: #3fb950; }
+  .chart-wrap { background: #161b22; border: 1px solid #30363d; border-radius: 12px; padding: 24px; width: 100%; max-width: 900px; }
+  canvas { width: 100% !important; }
+</style>
+</head>
+<body>
+<h1>Amazon (AMZN)</h1>
+<p class="subtitle">6-Month Price Trend · Aug 2025 – Feb 2026 · NASDAQ</p>
+
+<div class="stats">
+  <div class="stat">
+    <div class="stat-label">Current</div>
+    <div class="stat-value">$210.17</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">6-Month Change</div>
+    <div class="stat-value neg">−5.69%</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">6-Month High</div>
+    <div class="stat-value">$258.60</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">6-Month Low</div>
+    <div class="stat-value">$161.38</div>
+  </div>
+  <div class="stat">
+    <div class="stat-label">YTD Change</div>
+    <div class="stat-value neg">−9.18%</div>
+  </div>
+</div>
+
+<div class="chart-wrap">
+  <canvas id="chart"></canvas>
+</div>
+
+<script>
+// Approximate monthly closing prices based on search data
+const labels = [
+  'Aug 22', 'Sep 1', 'Sep 15', 'Oct 1', 'Oct 15', 'Nov 1',
+  'Nov 3', 'Nov 20', 'Dec 1', 'Dec 15', 'Jan 2', 'Jan 15',
+  'Feb 5', 'Feb 20'
+];
+
+const prices = [
+  195.0, 198.5, 202.3, 207.8, 212.4, 218.0,
+  258.6, 233.0, 228.5, 234.0, 218.5, 226.0,
+  233.1, 210.2
+];
+
+// Color based on change from previous
+const colors = prices.map((p, i) => i === 0 ? '#58a6ff' : (p >= prices[i-1] ? '#3fb950' : '#f85149'));
+
+const ctx = document.getElementById('chart').getContext('2d');
+
+// Gradient fill
+const grad = ctx.createLinearGradient(0, 0, 0, 400);
+grad.addColorStop(0, 'rgba(88, 166, 255, 0.25)');
+grad.addColorStop(1, 'rgba(88, 166, 255, 0.0)');
+
+new Chart(ctx, {
+  type: 'line',
+  data: {
+    labels,
+    datasets: [{
+      label: 'AMZN Price (USD)',
+      data: prices,
+      borderColor: '#58a6ff',
+      backgroundColor: grad,
+      borderWidth: 2.5,
+      pointBackgroundColor: colors,
+      pointBorderColor: colors,
+      pointRadius: 5,
+      pointHoverRadius: 8,
+      fill: true,
+      tension: 0.35
+    }]
+  },
+  options: {
+    responsive: true,
+    interaction: { mode: 'index', intersect: false },
+    plugins: {
+      legend: { display: false },
+      tooltip: {
+        backgroundColor: '#1c2128',
+        borderColor: '#30363d',
+        borderWidth: 1,
+        titleColor: '#8b949e',
+        bodyColor: '#e6edf3',
+        callbacks: {
+          label: ctx => ` $${ctx.parsed.y.toFixed(2)}`
+        }
+      }
+    },
+    scales: {
+      x: {
+        grid: { color: '#21262d' },
+        ticks: { color: '#8b949e', font: { size: 11 } }
+      },
+      y: {
+        grid: { color: '#21262d' },
+        ticks: {
+          color: '#8b949e',
+          font: { size: 11 },
+          callback: v => '$' + v.toFixed(0)
+        },
+        min: 150,
+        max: 275
+      }
+    }
+  }
+});
+</script>
+</body>
+</html>

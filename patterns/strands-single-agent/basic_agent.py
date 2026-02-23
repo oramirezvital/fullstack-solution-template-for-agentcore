@@ -11,6 +11,7 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
     AgentCoreMemorySessionManager,
 )
 from bedrock_agentcore.runtime import BedrockAgentCoreApp, RequestContext
+from mcp import stdio_client, StdioServerParameters
 from mcp.client.streamable_http import streamablehttp_client
 from strands import Agent
 from strands.models import BedrockModel
@@ -20,6 +21,37 @@ from strands_code_interpreter import StrandsCodeInterpreterTools
 from utils.auth import extract_user_id_from_context
 
 app = BedrockAgentCoreApp()
+
+
+def create_chartjs_mcp_client() -> MCPClient:
+    """
+    Create MCP client for Chart.js chart generation.
+    
+    The Chart.js MCP server generates beautiful, professional charts using Chart.js v4.
+    It supports multiple chart types (bar, line, pie, doughnut, scatter, bubble, radar, polar)
+    and can output both PNG images and interactive HTML divs.
+    
+    The server runs as a subprocess using stdio transport, which is the standard
+    way to communicate with command-line MCP servers.
+    
+    Returns:
+        MCPClient: Configured client for Chart.js MCP server
+    """
+    print("[AGENT] Creating Chart.js MCP client...")
+    
+    # Chart.js MCP server runs via npx with stdio transport
+    chartjs_client = MCPClient(
+        lambda: stdio_client(
+            StdioServerParameters(
+                command="npx",
+                args=["@ax-crew/chartjs-mcp-server"]
+            )
+        ),
+        prefix="chartjs",
+    )
+    
+    print("[AGENT] Chart.js MCP client created successfully")
+    return chartjs_client
 
 
 def create_alpha_vantage_mcp_client() -> MCPClient:
@@ -94,14 +126,21 @@ YOUR CAPABILITIES:
    - Fundamental data (COMPANY_OVERVIEW, EARNINGS, INCOME_STATEMENT, BALANCE_SHEET)
    - Market news and sentiment analysis
    - Options data, Forex, Crypto, Commodities, Economic indicators
+   - NOTE: Free tier has rate limits (5 calls/minute, 25 calls/day). Use TIME_SERIES_DAILY 
+     for historical data instead of multiple GLOBAL_QUOTE calls.
 
-2. CODE INTERPRETER:
-   - Generate professional charts and visualizations (matplotlib, plotly)
+2. CHART.JS MCP SERVER (chartjs_generateChart tool):
+   - Professional chart generation using Chart.js v4
+   - Supports 8 chart types: line, bar, pie, doughnut, scatter, bubble, radar, polar
+   - Outputs interactive HTML divs with hover tooltips and animations
+   - Perfect for visualizing financial data and trends
+
+3. CODE INTERPRETER:
    - Perform statistical analysis and financial calculations
-   - Create comparative analyses and correlations
+   - Process and transform data for chart generation
    - Build custom financial models and projections
 
-3. LONG-TERM MEMORY:
+4. LONG-TERM MEMORY:
    - Your memory automatically learns and stores user investment preferences
    - You remember past investment decisions and portfolio positions
    - You recall user's risk tolerance, investment goals, and strategies
@@ -126,67 +165,95 @@ When a user asks about portfolio performance:
 4. Create a visualization showing performance over time
 5. Provide detailed analysis with insights
 
-CHART GENERATION EXAMPLES:
+CHART GENERATION WORKFLOW:
 
-CRITICAL: Always return charts as base64-encoded images, NOT as saved files!
+When user asks for a chart (e.g., "Chart the 6-month price trend for AMAZON"):
 
-For price trends:
-```python
-import matplotlib.pyplot as plt
-import pandas as pd
-import base64
-from io import BytesIO
+1. FETCH DATA from Alpha Vantage:
+   - Use TIME_SERIES_DAILY for historical price data
+   - Extract dates and prices from the response
+   - Process data into arrays for charting
 
-# Create line chart with volume
-fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
-ax1.plot(dates, prices, linewidth=2, color='#2E86AB')
-ax1.set_ylabel('Price ($)', fontsize=12)
-ax1.grid(True, alpha=0.3)
-ax2.bar(dates, volumes, color='#A23B72', alpha=0.7)
-ax2.set_ylabel('Volume', fontsize=12)
-plt.tight_layout()
+2. PREPARE CHART CONFIGURATION:
+   Create a Chart.js configuration object. This MUST be a proper JSON object, NOT a string.
+   
+   EXAMPLE CONFIGURATION:
+   {
+     "type": "line",
+     "data": {
+       "labels": ["Sep 29", "Oct 02", "Oct 07"],
+       "datasets": [{
+         "label": "AMZN Price (USD)",
+         "data": [222.17, 222.41, 221.78],
+         "borderColor": "#58a6ff",
+         "backgroundColor": "rgba(88, 166, 255, 0.2)",
+         "fill": true
+       }]
+     },
+     "options": {
+       "responsive": true,
+       "plugins": {
+         "title": {
+           "display": true,
+           "text": "Amazon (AMZN) - 6 Month Price Trend"
+         }
+       }
+     }
+   }
 
-# IMPORTANT: Return as base64 image
-buffer = BytesIO()
-plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
-buffer.seek(0)
-image_base64 = base64.b64encode(buffer.read()).decode()
-plt.close()
-print(f"![Chart](data:image/png;base64,{image_base64})")
-```
+3. CALL chartjs_generateChart TOOL:
+   CRITICAL: When calling the tool, pass the configuration object directly, NOT as a string.
+   
+   CORRECT WAY TO CALL THE TOOL:
+   Use the chartjs_generateChart tool with these exact parameters:
+   - chartConfig: <the configuration object from step 2> (as an object, not a string!)
+   - outputFormat: "html"
+   
+   DO NOT stringify the configuration. DO NOT add quotes around it.
+   The tool expects: chartConfig={...object...}, NOT chartConfig="{...string...}"
+   
+   The tool will return self-contained HTML that displays automatically in the chat
 
-For portfolio performance:
-```python
-import matplotlib.pyplot as plt
-import base64
-from io import BytesIO
+4. PROVIDE CONTEXT:
+   Along with the chart, provide a brief summary:
+   - Current price
+   - Price change over the period
+   - High and low prices
+   - Key insights or trends
 
-# Create portfolio performance chart
-fig, ax = plt.subplots(figsize=(12, 6))
-for symbol, data in portfolio.items():
-    ax.plot(data['dates'], data['returns'], label=symbol, linewidth=2)
-ax.axhline(y=0, color='black', linestyle='--', alpha=0.3)
-ax.set_xlabel('Date')
-ax.set_ylabel('Return (%)')
-ax.set_title('Portfolio Performance', fontsize=16, fontweight='bold')
-ax.legend()
-ax.grid(True, alpha=0.3)
+CHART TYPES FOR DIFFERENT USE CASES:
+- line: Price trends, time series data (BEST for stock prices)
+- bar: Comparisons, categorical data (good for comparing multiple stocks)
+- pie/doughnut: Portfolio allocation, market share percentages
+- scatter/bubble: Correlation analysis (price vs volume)
+- radar: Multi-factor comparison (comparing stocks across metrics)
 
-# IMPORTANT: Return as base64 image
-buffer = BytesIO()
-plt.savefig(buffer, format='png', dpi=150, bbox_inches='tight')
-buffer.seek(0)
-image_base64 = base64.b64encode(buffer.read()).decode()
-plt.close()
-print(f"![Chart](data:image/png;base64,{image_base64})")
-```
+CHART STYLING TIPS:
+- Use green (#3fb950) for positive changes/gains
+- Use red (#f85149) for negative changes/losses
+- Use blue (#58a6ff) for neutral data
+- Add gradients for visual appeal: "rgba(88, 166, 255, 0.2)"
+- Enable tooltips for interactivity
+- Keep labels concise and readable
+
+IMPORTANT RULES:
+1. ALWAYS use chartjs_generateChart tool for charts - don't generate HTML manually
+2. Fetch real data from Alpha Vantage first
+3. Process data into proper arrays (labels and data must match in length)
+4. Use outputFormat="html" for interactive charts
+5. Provide context and insights along with the chart
+6. CRITICAL: Pass chartConfig as a JSON object, NOT as a JSON string
+   - WRONG: chartConfig="{\"type\": \"line\", ...}"
+   - RIGHT: chartConfig={"type": "line", ...}
 
 CHART GENERATION RULES:
-1. ALWAYS use BytesIO buffer and base64 encoding
-2. NEVER save to files (plt.savefig('file.png'))
-3. Print the base64 image in markdown format: ![Chart](data:image/png;base64,...)
-4. Close the plot with plt.close() after encoding
-5. Use dpi=150 for good quality without huge file sizes
+1. When user asks for a chart, use the chartjs_generateChart tool
+2. Fetch data from Alpha Vantage first, then format for Chart.js
+3. Always use outputFormat="html" for interactive charts
+4. Provide context and insights along with the chart
+5. Use appropriate chart types for different data (line for trends, bar for comparisons, etc.)
+6. Apply proper styling (colors, labels, tooltips)
+7. Keep charts responsive and user-friendly
 
 YOUR INVESTMENT ADVISORY APPROACH:
 
@@ -273,13 +340,19 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
         alpha_vantage_client = create_alpha_vantage_mcp_client()
         print("[AGENT] Alpha Vantage MCP client created successfully")
 
-        print("[AGENT] Creating Investment Advisor agent with Alpha Vantage tools and Code Interpreter...")
+        # Create Chart.js MCP client for visualizations
+        print("[AGENT] Creating Chart.js MCP client...")
+        chartjs_client = create_chartjs_mcp_client()
+        print("[AGENT] Chart.js MCP client created successfully")
+
+        print("[AGENT] Creating Investment Advisor agent with Alpha Vantage, Chart.js, and Code Interpreter...")
         agent = Agent(
             name="InvestmentAdvisor",
             system_prompt=system_prompt,
             tools=[
                 alpha_vantage_client,  # Alpha Vantage financial tools
-                code_tools.execute_python_securely,  # Code Interpreter for charts and calculations
+                chartjs_client,  # Chart.js visualization tools
+                code_tools.execute_python_securely,  # Code Interpreter for calculations
             ],
             model=bedrock_model,
             session_manager=session_manager,
@@ -288,7 +361,7 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
                 "session.id": session_id,
             },
         )
-        print("[AGENT] Investment Advisor agent created successfully with memory and financial tools")
+        print("[AGENT] Investment Advisor agent created successfully with memory, financial tools, and chart generation")
         return agent
 
     except Exception as e:

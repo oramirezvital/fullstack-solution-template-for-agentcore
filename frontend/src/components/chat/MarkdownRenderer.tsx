@@ -34,16 +34,36 @@ const components: Record<string, any> = {
   code({ className, children }: { className?: string; children?: React.ReactNode }) {
     const match = /language-(\w+)/.exec(className || "")
     const codeString = String(children).replace(/\n$/, "")
+    
     if (match) {
+      const language = match[1]
+      
+      // Render HTML code blocks as actual HTML for interactive charts
+      if (language === 'html') {
+        return (
+          <div className="my-3">
+            <div className="flex items-center justify-between px-3 py-1 bg-gray-100 border border-gray-300 rounded-t-md">
+              <span className="text-xs text-gray-500">Interactive Chart</span>
+              <CopyButton text={codeString} />
+            </div>
+            <div 
+              className="border border-t-0 border-gray-300 rounded-b-md p-4 bg-white"
+              dangerouslySetInnerHTML={{ __html: codeString }}
+            />
+          </div>
+        )
+      }
+      
+      // Regular syntax highlighting for other languages
       return (
         <div className="my-2 rounded-md overflow-hidden border border-gray-300 bg-white">
           <div className="flex items-center justify-between px-3 py-1 bg-gray-100 border-b border-gray-300">
-            <span className="text-xs text-gray-500">{match[1]}</span>
+            <span className="text-xs text-gray-500">{language}</span>
             <CopyButton text={codeString} />
           </div>
           <SyntaxHighlighter
             style={oneLight}
-            language={match[1]}
+            language={language}
             PreTag="div"
             customStyle={{ margin: 0, padding: "0.75rem", fontSize: "0.8rem", background: "white" }}
           >
@@ -58,13 +78,14 @@ const components: Record<string, any> = {
     return <>{children}</>
   },
   img({ src, alt }: { src?: string; alt?: string }) {
-    // Handle base64 images from Code Interpreter
+    // Handle base64 images from Code Interpreter with proper sizing
     return (
-      <div className="my-3 rounded-lg overflow-hidden border border-gray-200 bg-white p-2">
+      <div className="my-3 rounded-lg overflow-hidden border border-gray-200 bg-white p-3">
         <img 
           src={src} 
           alt={alt || "Chart"} 
-          className="w-full h-auto rounded"
+          className="w-full h-auto max-w-full rounded"
+          style={{ maxHeight: '500px', objectFit: 'contain' }}
           loading="lazy"
         />
       </div>
@@ -74,6 +95,67 @@ const components: Record<string, any> = {
 
 export function MarkdownRenderer({ content }: { content: string }) {
   if (!content) return null
+  
+  // Check if content contains Chart.js HTML (div with chart-container id)
+  const hasChartJsHtml = content.includes('<div id="chart-container-') && content.includes('</script>')
+  
+  if (hasChartJsHtml) {
+    // Split content into text and HTML parts
+    const parts: Array<{ type: 'text' | 'html', content: string }> = []
+    
+    // Match Chart.js HTML blocks
+    const chartRegex = /<div id="chart-container-[^"]+">[\s\S]*?<\/script>\s*<\/div>/g
+    let lastIndex = 0
+    let match
+    
+    while ((match = chartRegex.exec(content)) !== null) {
+      // Add text before the chart
+      if (match.index > lastIndex) {
+        const textBefore = content.substring(lastIndex, match.index).trim()
+        if (textBefore) {
+          parts.push({ type: 'text', content: textBefore })
+        }
+      }
+      
+      // Add the chart HTML
+      parts.push({ type: 'html', content: match[0] })
+      lastIndex = match.index + match[0].length
+    }
+    
+    // Add remaining text after the last chart
+    if (lastIndex < content.length) {
+      const textAfter = content.substring(lastIndex).trim()
+      if (textAfter) {
+        parts.push({ type: 'text', content: textAfter })
+      }
+    }
+    
+    // Render mixed content
+    return (
+      <div className="space-y-3">
+        {parts.map((part, idx) => {
+          if (part.type === 'html') {
+            return (
+              <div 
+                key={idx}
+                className="my-4 bg-white dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700"
+                dangerouslySetInnerHTML={{ __html: part.content }}
+              />
+            )
+          }
+          return (
+            <div key={idx} className="markdown-body leading-relaxed [&_p]:my-1.5 [&_ul]:my-1.5 [&_ul]:pl-5 [&_ul]:list-disc [&_ol]:my-1.5 [&_ol]:pl-5 [&_ol]:list-decimal [&_li]:my-0.5 [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:my-1.5 [&_blockquote]:text-gray-600 [&_table]:my-2 [&_table]:min-w-full [&_table]:border-collapse [&_table]:text-xs [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-100 [&_th]:border [&_th]:border-gray-300 [&_th]:text-left [&_th]:font-medium [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-gray-300 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+                {completePartialMarkdown(part.content)}
+              </ReactMarkdown>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+  
+  // Regular markdown rendering
   return (
     <div className="markdown-body leading-relaxed [&_p]:my-1.5 [&_ul]:my-1.5 [&_ul]:pl-5 [&_ul]:list-disc [&_ol]:my-1.5 [&_ol]:pl-5 [&_ol]:list-decimal [&_li]:my-0.5 [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:my-1.5 [&_blockquote]:text-gray-600 [&_table]:my-2 [&_table]:min-w-full [&_table]:border-collapse [&_table]:text-xs [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-100 [&_th]:border [&_th]:border-gray-300 [&_th]:text-left [&_th]:font-medium [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-gray-300 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
       <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>

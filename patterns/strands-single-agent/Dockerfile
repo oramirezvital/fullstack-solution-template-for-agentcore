@@ -5,12 +5,27 @@ FROM ghcr.io/astral-sh/uv:python3.13-bookworm-slim
 
 WORKDIR /app
 
+# Install Node.js 20.x for Chart.js MCP server
+RUN apt-get update && \
+    apt-get install -y curl && \
+    curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+    apt-get install -y nodejs && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+# Verify Node.js and npm installation
+RUN node --version && npm --version
+
+# Install Chart.js MCP server globally
+RUN npm install -g @ax-crew/chartjs-mcp-server
+
 # Configure UV for container environment
 ENV UV_SYSTEM_PYTHON=1 \
     UV_COMPILE_BYTECODE=1 \
     DOCKER_CONTAINER=1 \
     OTEL_PYTHON_LOG_CORRELATION=true \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PATH="/usr/local/bin:${PATH}"
 
 # Copy pyproject.toml and gateway package for FAST installation
 COPY pyproject.toml .
