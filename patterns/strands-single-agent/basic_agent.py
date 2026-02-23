@@ -58,47 +58,49 @@ def create_alpha_vantage_mcp_client() -> MCPClient:
     return alpha_vantage_client
 
 
-def create_gateway_mcp_client() -> MCPClient:
-    """
-    Create MCP client for AgentCore Gateway (chart generation tool).
-    
-    The Gateway provides access to the generate_chart tool, which is implemented
-    as a Lambda function that wraps the Chart.js MCP server. This architecture
-    solves MCP serialization issues by having the Lambda handle the Chart.js
-    communication.
-    
-    The Gateway uses OAuth2 client credentials flow for authentication via Cognito.
-    
-    Returns:
-        MCPClient: Configured client for AgentCore Gateway
-        
-    Raises:
-        ValueError: If GATEWAY_URL environment variable is not set
-        Exception: If OAuth2 token retrieval fails
-    """
-    from utils.auth import get_gateway_access_token
-    
-    gateway_url = os.environ.get("GATEWAY_URL")
-    if not gateway_url:
-        raise ValueError("GATEWAY_URL environment variable is required")
-    
-    print("[AGENT] Creating Gateway MCP client...")
-    
-    # Get OAuth2 access token for Gateway authentication
-    # This uses the machine client credentials stored in SSM
-    access_token = get_gateway_access_token()
-    
-    # Create MCP client for Gateway with JWT authentication
-    gateway_client = MCPClient(
-        lambda: streamablehttp_client(
-            url=gateway_url,
-            headers={"Authorization": f"Bearer {access_token}"}
-        ),
-        prefix="gateway",
-    )
-    
-    print("[AGENT] Gateway MCP client created successfully")
-    return gateway_client
+# Gateway MCP Client (currently not used for charts, but kept for future MCP tools)
+# Uncomment and use this when adding other MCP tools via Gateway
+#
+# def create_gateway_mcp_client() -> MCPClient:
+#     """
+#     Create MCP client for AgentCore Gateway.
+#     
+#     The Gateway can provide access to multiple MCP tools implemented as Lambda functions.
+#     This architecture is useful for MCP servers that have serialization issues or
+#     require special runtime environments.
+#     
+#     The Gateway uses OAuth2 client credentials flow for authentication via Cognito.
+#     
+#     Returns:
+#         MCPClient: Configured client for AgentCore Gateway
+#         
+#     Raises:
+#         ValueError: If GATEWAY_URL environment variable is not set
+#         Exception: If OAuth2 token retrieval fails
+#     """
+#     from utils.auth import get_gateway_access_token
+#     
+#     gateway_url = os.environ.get("GATEWAY_URL")
+#     if not gateway_url:
+#         raise ValueError("GATEWAY_URL environment variable is required")
+#     
+#     print("[AGENT] Creating Gateway MCP client...")
+#     
+#     # Get OAuth2 access token for Gateway authentication
+#     # This uses the machine client credentials stored in SSM
+#     access_token = get_gateway_access_token()
+#     
+#     # Create MCP client for Gateway with JWT authentication
+#     gateway_client = MCPClient(
+#         lambda: streamablehttp_client(
+#             url=gateway_url,
+#             headers={"Authorization": f"Bearer {access_token}"}
+#         ),
+#         prefix="gateway",
+#     )
+#     
+#     print("[AGENT] Gateway MCP client created successfully")
+#     return gateway_client
 
 
 def create_investment_advisor_agent(user_id: str, session_id: str) -> Agent:
@@ -141,12 +143,11 @@ YOUR CAPABILITIES:
    - NOTE: Free tier has rate limits (5 calls/minute, 25 calls/day). Use TIME_SERIES_DAILY 
      for historical data instead of multiple GLOBAL_QUOTE calls.
 
-2. GATEWAY CHART GENERATION (gateway_generate_chart tool):
-   - Professional chart generation using Chart.js v4 via Gateway Lambda
-   - Supports 8 chart types: line, bar, pie, doughnut, scatter, bubble, radar, polar
-   - Outputs interactive HTML divs with hover tooltips and animations
+2. CHART GENERATION (JSON format):
+   - Return chart data as structured JSON in your response
+   - Frontend will render interactive charts using React charting library
+   - Supports chart types: line, bar, area, pie, doughnut
    - Perfect for visualizing financial data and trends
-   - Gateway Lambda handles Chart.js MCP communication internally
 
 3. CODE INTERPRETER:
    - Perform statistical analysis and financial calculations
@@ -189,45 +190,35 @@ When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
 
 2. PREPARE DATA in simple format:
    labels = ["Feb 11", "Feb 12", "Feb 13", ...]
-   datasets = [{
-     "label": "AMZN Price (USD)",
-     "data": [204.08, 199.6, 198.79, ...],
-     "borderColor": "#3fb950",
-     "backgroundColor": "rgba(63, 185, 80, 0.1)",
-     "fill": true,
-     "tension": 0.3
-   }]
+   data_values = [204.08, 199.6, 198.79, ...]
 
-3. CALL gateway_generate_chart TOOL:
-   Use the Gateway chart tool with these parameters:
-   - chartType: "line" (for trends), "bar" (for comparisons), etc.
-   - data: {labels: [...], datasets: [...]}
-   - title: "Amazon (AMZN) - 1 Week Price Trend"
-   - options: (optional) additional Chart.js customization
+3. RETURN CHART JSON in your response:
+   Include a JSON code block with this structure:
    
-   EXAMPLE TOOL CALL:
+   ```json
    {
+     "type": "chart",
      "chartType": "line",
+     "title": "Amazon (AMZN) - 1 Week Price Trend",
      "data": {
-       "labels": ["Feb 11", "Feb 12", "Feb 13"],
+       "labels": ["Feb 11", "Feb 12", "Feb 13", "Feb 17", "Feb 18", "Feb 19", "Feb 20"],
        "datasets": [{
          "label": "AMZN Price (USD)",
-         "data": [204.08, 199.6, 198.79],
-         "borderColor": "#3fb950",
-         "backgroundColor": "rgba(63, 185, 80, 0.1)",
-         "fill": true,
-         "tension": 0.3
+         "data": [204.08, 199.6, 198.79, 201.15, 204.79, 204.86, 210.11],
+         "color": "#3fb950"
        }]
      },
-     "title": "Amazon (AMZN) - 1 Week Price Trend"
+     "options": {
+       "yAxisLabel": "Price (USD)",
+       "xAxisLabel": "Date"
+     }
    }
+   ```
    
-   The tool returns interactive HTML. CRITICAL: Return the HTML directly in your response 
-   WITHOUT wrapping it in code blocks or markdown. Just paste the raw HTML output from the 
-   tool directly into your message so it renders as an interactive chart.
+   The frontend will automatically detect this JSON and render an interactive chart.
 
 4. PROVIDE CONTEXT:
-   Along with the chart, provide a brief summary:
+   Along with the chart JSON, provide a brief summary:
    - Current price
    - Price change over the period
    - High and low prices
@@ -236,22 +227,19 @@ When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
 CHART TYPES FOR DIFFERENT USE CASES:
 - line: Price trends, time series data (BEST for stock prices)
 - bar: Comparisons, categorical data (good for comparing multiple stocks)
+- area: Filled line charts showing volume/magnitude
 - pie/doughnut: Portfolio allocation, market share percentages
-- scatter/bubble: Correlation analysis (price vs volume)
-- radar: Multi-factor comparison (comparing stocks across metrics)
 
 CHART STYLING TIPS:
 - Use green (#3fb950) for positive changes/gains
 - Use red (#f85149) for negative changes/losses
 - Use blue (#58a6ff) for neutral data
-- Add "fill": true for area charts
-- Use "tension": 0.3-0.4 for smooth lines
 - Keep labels concise and readable
 
 IMPORTANT RULES:
-1. ALWAYS use gateway_generate_chart tool for charts
+1. ALWAYS return chart data as JSON code blocks (not tool calls)
 2. Fetch real data from Alpha Vantage first
-3. Process data into simple arrays (labels and datasets)
+3. Process data into simple arrays (labels and data values)
 4. Provide context and insights along with the chart
 5. Use appropriate chart types for different data
 
@@ -341,16 +329,11 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
         print("[AGENT] Alpha Vantage MCP client created successfully")
 
         # Create Gateway MCP client for chart generation
-        print("[AGENT] Creating Gateway MCP client...")
-        gateway_client = create_gateway_mcp_client()
-        print("[AGENT] Gateway MCP client created successfully")
-
-        print("[AGENT] Creating Investment Advisor agent with Alpha Vantage, Gateway, and Code Interpreter...")
+        print("[AGENT] Creating Investment Advisor agent with Alpha Vantage and Code Interpreter...")
         agent = Agent(
             name="InvestmentAdvisor",
             system_prompt=system_prompt,
             tools=[
-                gateway_client,  # Gateway chart generation tool
                 alpha_vantage_client,  # Alpha Vantage financial tools
                 code_tools.execute_python_securely,  # Code Interpreter for calculations
             ],
@@ -361,7 +344,7 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
                 "session.id": session_id,
             },
         )
-        print("[AGENT] Investment Advisor agent created successfully with memory, financial tools, and chart generation")
+        print("[AGENT] Investment Advisor agent created successfully with memory and financial tools")
         return agent
 
     except Exception as e:

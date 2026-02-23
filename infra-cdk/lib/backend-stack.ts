@@ -607,23 +607,21 @@ export class BackendStack extends cdk.NestedStack {
 
   private createAgentCoreGateway(config: AppConfig): void {
     /**
-     * Create AgentCore Gateway with Chart Generation Tool
+     * Create AgentCore Gateway Infrastructure
      * 
-     * This Gateway provides a single tool: generate_chart
-     * The tool is implemented as a Lambda function that wraps the Chart.js MCP server.
+     * The Gateway is kept for future MCP tools, but chart generation
+     * now uses JSON format rendered in the frontend instead of Gateway Lambda.
      * 
-     * Architecture:
-     * Agent → Gateway → Chart Lambda → Chart.js MCP Server → HTML Chart
-     * 
-     * The Lambda handles:
-     * - Accepting chart parameters from the agent
-     * - Calling Chart.js MCP server via stdio transport
-     * - Returning interactive HTML charts
+     * To add new MCP tools via Gateway:
+     * 1. Create Lambda function with MCP server
+     * 2. Create Gateway target pointing to Lambda
+     * 3. Uncomment create_gateway_mcp_client() in agent code
+     * 4. Add gateway_client to agent tools list
      */
 
-    // Create Chart Tool Lambda with Node.js support
-    // This Lambda needs Node.js to run the Chart.js MCP server via npx
-    // We use Docker to build a custom image with both Python and Node.js
+    // Chart Tool Lambda - COMMENTED OUT (charts now use JSON format)
+    // Uncomment this section when adding other MCP tools via Gateway
+    /*
     const chartToolLambda = new lambda.DockerImageFunction(this, "ChartToolLambda", {
       code: lambda.DockerImageCode.fromImageAsset(
         path.join(__dirname, "../../gateway/tools/chart_tool"),
@@ -640,15 +638,16 @@ export class BackendStack extends cdk.NestedStack {
         removalPolicy: cdk.RemovalPolicy.DESTROY,
       }),
     })
+    */
 
     // Create comprehensive IAM role for gateway
     const gatewayRole = new iam.Role(this, "GatewayRole", {
       assumedBy: new iam.ServicePrincipal("bedrock-agentcore.amazonaws.com"),
-      description: "Role for AgentCore Gateway with chart generation tool",
+      description: "Role for AgentCore Gateway (ready for future MCP tools)",
     })
 
-    // Lambda invoke permission
-    chartToolLambda.grantInvoke(gatewayRole)
+    // Lambda invoke permission - COMMENTED OUT until we add MCP tools
+    // chartToolLambda.grantInvoke(gatewayRole)
 
     // Bedrock permissions (region-agnostic)
     gatewayRole.addToPolicy(
@@ -693,9 +692,9 @@ export class BackendStack extends cdk.NestedStack {
       })
     )
 
-    // Load chart tool specification from JSON file
-    const chartToolSpecPath = path.join(__dirname, "../../gateway/tools/chart_tool/tool_spec.json")
-    const chartToolSpec = JSON.parse(fs.readFileSync(chartToolSpecPath, "utf8"))
+    // Load chart tool specification - COMMENTED OUT (charts now use JSON)
+    // const chartToolSpecPath = path.join(__dirname, "../../gateway/tools/chart_tool/tool_spec.json")
+    // const chartToolSpec = JSON.parse(fs.readFileSync(chartToolSpecPath, "utf8"))
 
     // Cognito OAuth2 configuration for gateway
     const cognitoIssuer = `https://cognito-idp.${this.region}.amazonaws.com/${this.userPool.userPoolId}`
@@ -718,20 +717,22 @@ export class BackendStack extends cdk.NestedStack {
           discoveryUrl: cognitoDiscoveryUrl,
         },
       },
-      description: "AgentCore Gateway with chart generation tool",
+      description: "AgentCore Gateway (ready for future MCP tools)",
     })
 
-    // Create Chart Tool Gateway Target using L1 construct
+    // Create Gateway Target - COMMENTED OUT (charts now use JSON)
+    // Uncomment and modify this when adding MCP tools via Gateway
+    /*
     const chartGatewayTarget = new bedrockagentcore.CfnGatewayTarget(this, "ChartGatewayTarget", {
       gatewayIdentifier: gateway.attrGatewayIdentifier,
-      name: "chart-tool-target",  // Must match pattern: alphanumeric and hyphens only
+      name: "chart-tool-target",
       description: "Chart generation tool Lambda target",
       targetConfiguration: {
         mcp: {
           lambda: {
             lambdaArn: chartToolLambda.functionArn,
             toolSchema: {
-              inlinePayload: [chartToolSpec],  // Must be an array, not a single object
+              inlinePayload: [chartToolSpec],
             },
           },
         },
@@ -746,6 +747,8 @@ export class BackendStack extends cdk.NestedStack {
     // Ensure proper creation order
     chartGatewayTarget.addDependency(gateway)
     gateway.node.addDependency(chartToolLambda)
+    */
+    
     gateway.node.addDependency(this.machineClient)
     gateway.node.addDependency(gatewayRole)
 
@@ -772,9 +775,11 @@ export class BackendStack extends cdk.NestedStack {
 
     new cdk.CfnOutput(this, "GatewayArn", {
       value: gateway.attrGatewayArn,
-      description: "AgentCore Gateway ARN",
+      description: "AgentCore Gateway ARN (ready for future MCP tools)",
     })
 
+    // Chart Tool outputs - COMMENTED OUT (charts now use JSON)
+    /*
     new cdk.CfnOutput(this, "ChartGatewayTargetId", {
       value: chartGatewayTarget.ref,
       description: "Chart Tool Gateway Target ID",
@@ -784,6 +789,7 @@ export class BackendStack extends cdk.NestedStack {
       description: "ARN of the chart tool Lambda",
       value: chartToolLambda.functionArn,
     })
+    */
   }
 
   private createMachineAuthentication(config: AppConfig): void {

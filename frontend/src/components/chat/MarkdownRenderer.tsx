@@ -7,6 +7,8 @@ import { Prism as SyntaxHighlighter } from "react-syntax-highlighter"
 import { oneLight } from "react-syntax-highlighter/dist/esm/styles/prism"
 import { Copy, Check } from "lucide-react"
 
+import { ChartRenderer } from "./ChartRenderer"
+
 function completePartialMarkdown(text: string): string {
   const fenceCount = (text.match(/^```/gm) || []).length
   if (fenceCount % 2 !== 0) return text + "\n```"
@@ -38,7 +40,20 @@ const components: Record<string, any> = {
     if (match) {
       const language = match[1]
       
-      // Render HTML code blocks as actual HTML for interactive charts
+      // Detect and render chart JSON
+      if (language === 'json') {
+        try {
+          const jsonData = JSON.parse(codeString)
+          // Check if it's a chart specification
+          if (jsonData.type === 'chart' && jsonData.chartType && jsonData.data) {
+            return <ChartRenderer chartSpec={jsonData} />
+          }
+        } catch (e) {
+          // Not valid JSON or not a chart, fall through to regular rendering
+        }
+      }
+      
+      // Render HTML code blocks as actual HTML for interactive charts (legacy support)
       // This handles both ```html blocks and plain HTML that looks like Chart.js output
       if (language === 'html' || (codeString.includes('<div id="chart-container-') && codeString.includes('</script>'))) {
         return (
