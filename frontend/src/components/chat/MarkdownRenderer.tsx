@@ -130,7 +130,85 @@ const components: Record<string, any> = {
 export function MarkdownRenderer({ content }: { content: string }) {
   if (!content) return null
   
-  // Check if content contains Chart.js HTML (div with chart-container id)
+  // Check if content contains chart JSON (either in code blocks or raw)
+  const chartJsonRegex = /\{[^{}]*"type"\s*:\s*"chart"[^{}]*"chartType"[^{}]*"data"[^{}]*\}/gs
+  const hasChartJson = chartJsonRegex.test(content)
+  
+  if (hasChartJson) {
+    // Split content into text and chart JSON parts
+    const parts: Array<{ type: 'text' | 'chart', content: string }> = []
+    
+    // Reset regex
+    chartJsonRegex.lastIndex = 0
+    let lastIndex = 0
+    let match
+    
+    while ((match = chartJsonRegex.exec(content)) !== null) {
+      // Add text before the chart
+      if (match.index > lastIndex) {
+        const textBefore = content.substring(lastIndex, match.index).trim()
+        if (textBefore) {
+          parts.push({ type: 'text', content: textBefore })
+        }
+      }
+      
+      // Try to parse the JSON
+      try {
+        const jsonData = JSON.parse(match[0])
+        if (jsonData.type === 'chart' && jsonData.chartType && jsonData.data) {
+          parts.push({ type: 'chart', content: match[0] })
+        } else {
+          // Not a valid chart, treat as text
+          parts.push({ type: 'text', content: match[0] })
+        }
+      } catch (e) {
+        // Invalid JSON, treat as text
+        parts.push({ type: 'text', content: match[0] })
+      }
+      
+      lastIndex = match.index + match[0].length
+    }
+    
+    // Add remaining text after the last chart
+    if (lastIndex < content.length) {
+      const textAfter = content.substring(lastIndex).trim()
+      if (textAfter) {
+        parts.push({ type: 'text', content: textAfter })
+      }
+    }
+    
+    // Render mixed content
+    return (
+      <div className="space-y-3">
+        {parts.map((part, idx) => {
+          if (part.type === 'chart') {
+            try {
+              const chartSpec = JSON.parse(part.content)
+              return <ChartRenderer key={idx} chartSpec={chartSpec} />
+            } catch (e) {
+              // Fallback to text if parsing fails
+              return (
+                <div key={idx} className="markdown-body leading-relaxed [&_p]:my-1.5 [&_ul]:my-1.5 [&_ul]:pl-5 [&_ul]:list-disc [&_ol]:my-1.5 [&_ol]:pl-5 [&_ol]:list-decimal [&_li]:my-0.5 [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:my-1.5 [&_blockquote]:text-gray-600 [&_table]:my-2 [&_table]:min-w-full [&_table]:border-collapse [&_table]:text-xs [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-100 [&_th]:border [&_th]:border-gray-300 [&_th]:text-left [&_th]:font-medium [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-gray-300 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+                    {completePartialMarkdown(part.content)}
+                  </ReactMarkdown>
+                </div>
+              )
+            }
+          }
+          return (
+            <div key={idx} className="markdown-body leading-relaxed [&_p]:my-1.5 [&_ul]:my-1.5 [&_ul]:pl-5 [&_ul]:list-disc [&_ol]:my-1.5 [&_ol]:pl-5 [&_ol]:list-decimal [&_li]:my-0.5 [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:my-1.5 [&_blockquote]:text-gray-600 [&_table]:my-2 [&_table]:min-w-full [&_table]:border-collapse [&_table]:text-xs [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-100 [&_th]:border [&_th]:border-gray-300 [&_th]:text-left [&_th]:font-medium [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-gray-300 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
+              <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+                {completePartialMarkdown(part.content)}
+              </ReactMarkdown>
+            </div>
+          )
+        })}
+      </div>
+    )
+  }
+  
+  // Check if content contains Chart.js HTML (div with chart-container id) - legacy support
   const hasChartJsHtml = content.includes('<div id="chart-container-') && content.includes('</script>')
   
   if (hasChartJsHtml) {
