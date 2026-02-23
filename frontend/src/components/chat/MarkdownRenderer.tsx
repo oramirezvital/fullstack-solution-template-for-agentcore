@@ -130,25 +130,45 @@ const components: Record<string, any> = {
 export function MarkdownRenderer({ content }: { content: string }) {
   if (!content) return null
   
-  // Check if content contains chart JSON (more flexible pattern)
-  // Look for JSON objects with "type":"chart" pattern
-  const chartJsonRegex = /\{(?:[^{}]|\{[^{}]*\})*"type"\s*:\s*"chart"(?:[^{}]|\{[^{}]*\})*\}/g
-  
-  // Try to find and extract chart JSON
+  // Simple approach: Look for {"type":"chart" or {"type": "chart" pattern
+  // Then try to extract and parse the complete JSON object
   const chartMatches: Array<{ json: string, index: number }> = []
+  
+  // Find all occurrences of {"type":"chart" or {"type": "chart"
+  const typeChartPattern = /\{\s*"type"\s*:\s*"chart"/g
   let match
   
-  while ((match = chartJsonRegex.exec(content)) !== null) {
+  while ((match = typeChartPattern.exec(content)) !== null) {
+    // Found start of potential chart JSON, now extract the complete object
+    const startIndex = match.index
+    let braceCount = 0
+    let endIndex = startIndex
+    
+    // Count braces to find the end of the JSON object
+    for (let i = startIndex; i < content.length; i++) {
+      if (content[i] === '{') braceCount++
+      if (content[i] === '}') braceCount--
+      if (braceCount === 0) {
+        endIndex = i + 1
+        break
+      }
+    }
+    
+    // Extract the JSON string
+    const jsonString = content.substring(startIndex, endIndex)
+    
     try {
-      const jsonData = JSON.parse(match[0])
+      const jsonData = JSON.parse(jsonString)
       if (jsonData.type === 'chart' && jsonData.chartType && jsonData.data) {
-        chartMatches.push({ json: match[0], index: match.index })
+        console.log('[MarkdownRenderer] Valid chart found:', jsonData.title)
+        chartMatches.push({ json: jsonString, index: startIndex })
       }
     } catch (e) {
-      // Invalid JSON, skip
-      continue
+      console.error('[MarkdownRenderer] Failed to parse potential chart JSON:', e)
     }
   }
+  
+  console.log('[MarkdownRenderer] Total charts found:', chartMatches.length)
   
   if (chartMatches.length > 0) {
     // Split content into text and chart parts
