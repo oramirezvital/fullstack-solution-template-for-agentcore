@@ -194,6 +194,7 @@ When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
 
 3. RETURN CHART JSON in your response:
    CRITICAL: You MUST wrap the JSON in a markdown code block
+   IMPORTANT: Include the JSON directly in YOUR response text, NOT as Code Interpreter output!
    
    Example response format:
    
@@ -221,7 +222,10 @@ When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
    
    The frontend will automatically detect this JSON and render an interactive chart.
    
-   IMPORTANT: Always wrap in code block with language "json"!
+   IMPORTANT: 
+   - Always wrap in code block with language "json"
+   - Include JSON in YOUR message text, NOT in Code Interpreter output
+   - You can use Code Interpreter to process data, but return the final chart JSON in your own response
 
 4. PROVIDE CONTEXT:
    Along with the chart JSON, provide a brief summary:
