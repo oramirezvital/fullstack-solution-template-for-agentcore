@@ -193,9 +193,13 @@ When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
    data_values = [204.08, 199.6, 198.79, ...]
 
 3. RETURN CHART JSON in your response:
-   Include a JSON code block with this structure:
+   CRITICAL: You MUST wrap the JSON in a markdown code block
    
-   ```json
+   Example response format:
+   
+   Here's the 1-week price trend for Amazon:
+   
+   [Use three backticks followed by "json" to start the code block]
    {
      "type": "chart",
      "chartType": "line",
@@ -213,9 +217,11 @@ When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
        "xAxisLabel": "Date"
      }
    }
-   ```
+   [Use three backticks to close the code block]
    
    The frontend will automatically detect this JSON and render an interactive chart.
+   
+   IMPORTANT: Always wrap in code block with language "json"!
 
 4. PROVIDE CONTEXT:
    Along with the chart JSON, provide a brief summary:
