@@ -569,6 +569,24 @@ export class BackendStack extends cdk.NestedStack {
       }),
     })
 
+    // Create stock tool Lambda with Alpha Vantage API
+    const stockToolLambda = new PythonFunction(this, "StockToolLambda", {
+      runtime: lambda.Runtime.PYTHON_3_13,
+      handler: "handler",
+      entry: path.join(__dirname, "../../gateway/tools/stock_tool"),
+      index: "stock_tool_lambda.py",
+      timeout: cdk.Duration.seconds(60),
+      memorySize: 256,
+      environment: {
+        ALPHA_VANTAGE_API_KEY: "6I7SGM9D7G40YB1I",
+      },
+      logGroup: new logs.LogGroup(this, "StockToolLambdaLogGroup", {
+        logGroupName: `/aws/lambda/${config.stack_name_base}-stock-tool`,
+        retention: logs.RetentionDays.ONE_WEEK,
+        removalPolicy: cdk.RemovalPolicy.DESTROY,
+      }),
+    })
+
     // Create comprehensive IAM role for gateway
     const gatewayRole = new iam.Role(this, "GatewayRole", {
       assumedBy: new iam.ServicePrincipal("bedrock-agentcore.amazonaws.com"),
@@ -577,6 +595,7 @@ export class BackendStack extends cdk.NestedStack {
 
     // Lambda invoke permission
     toolLambda.grantInvoke(gatewayRole)
+    stockToolLambda.grantInvoke(gatewayRole)
 
     // Bedrock permissions (region-agnostic)
     gatewayRole.addToPolicy(
@@ -624,6 +643,10 @@ export class BackendStack extends cdk.NestedStack {
     // Load tool specification from JSON file
     const toolSpecPath = path.join(__dirname, "../../gateway/tools/sample_tool/tool_spec.json")
     const apiSpec = JSON.parse(require("fs").readFileSync(toolSpecPath, "utf8"))
+
+    // Load stock tool specification
+    const stockToolSpecPath = path.join(__dirname, "../../gateway/tools/stock_tool/tool_spec.json")
+    const stockApiSpec = JSON.parse(require("fs").readFileSync(stockToolSpecPath, "utf8"))
 
     // Cognito OAuth2 configuration for gateway
     const cognitoIssuer = `https://cognito-idp.${this.region}.amazonaws.com/${this.userPool.userPoolId}`
@@ -674,9 +697,33 @@ export class BackendStack extends cdk.NestedStack {
       ],
     })
 
+    // Create Stock Tool Gateway Target
+    const stockGatewayTarget = new bedrockagentcore.CfnGatewayTarget(this, "StockGatewayTarget", {
+      gatewayIdentifier: gateway.attrGatewayIdentifier,
+      name: "stock-tool-target",
+      description: "Stock information tool Lambda target",
+      targetConfiguration: {
+        mcp: {
+          lambda: {
+            lambdaArn: stockToolLambda.functionArn,
+            toolSchema: {
+              inlinePayload: stockApiSpec,
+            },
+          },
+        },
+      },
+      credentialProviderConfigurations: [
+        {
+          credentialProviderType: "GATEWAY_IAM_ROLE",
+        },
+      ],
+    })
+
     // Ensure proper creation order
     gatewayTarget.addDependency(gateway)
+    stockGatewayTarget.addDependency(gateway)
     gateway.node.addDependency(toolLambda)
+    gateway.node.addDependency(stockToolLambda)
     gateway.node.addDependency(this.machineClient)
     gateway.node.addDependency(gatewayRole)
 
@@ -708,9 +755,19 @@ export class BackendStack extends cdk.NestedStack {
       description: "AgentCore Gateway Target ID",
     })
 
+    new cdk.CfnOutput(this, "StockGatewayTargetId", {
+      value: stockGatewayTarget.ref,
+      description: "Stock Tool Gateway Target ID",
+    })
+
     new cdk.CfnOutput(this, "ToolLambdaArn", {
       description: "ARN of the sample tool Lambda",
       value: toolLambda.functionArn,
+    })
+
+    new cdk.CfnOutput(this, "StockToolLambdaArn", {
+      description: "ARN of the stock tool Lambda",
+      value: stockToolLambda.functionArn,
     })
   }
 

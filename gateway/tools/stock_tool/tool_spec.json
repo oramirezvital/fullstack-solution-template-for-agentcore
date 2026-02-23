@@ -1,0 +1,18 @@
+[
+  {
+    "name": "get_stock_info",
+    "description": "Retrieves comprehensive stock information including current price, daily change, volume, market cap, day high/low, 52-week high/low, and P/E ratio for a given stock ticker symbol. Use this tool when users ask about stock prices, market data, or company valuations.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "symbol": {
+          "type": "string",
+          "description": "Stock ticker symbol (e.g., 'AAPL' for Apple, 'GOOGL' for Google, 'MSFT' for Microsoft). Must be a valid stock symbol traded on major exchanges."
+        }
+      },
+      "required": [
+        "symbol"
+      ]
+    }
+  }
+]

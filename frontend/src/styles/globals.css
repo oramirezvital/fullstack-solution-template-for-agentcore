@@ -132,12 +132,73 @@
   }
   body {
     @apply bg-background text-foreground;
+    background: linear-gradient(135deg, oklch(0.99 0.01 200) 0%, oklch(0.97 0.02 180) 100%);
+  }
+  .dark body {
+    background: linear-gradient(135deg, oklch(0.15 0.01 240) 0%, oklch(0.12 0.02 220) 100%);
   }
   a {
     @apply text-brand-yellow hover:text-brand-yellow/80 underline;
   }
 }
 
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: oklch(0.7 0 0 / 0.3);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.6 0 0 / 0.5);
+}
+
+.dark ::-webkit-scrollbar-thumb {
+  background: oklch(0.4 0 0 / 0.3);
+}
+
+.dark ::-webkit-scrollbar-thumb:hover {
+  background: oklch(0.5 0 0 / 0.5);
+}
+
+/* Glass morphism effect */
+.glass-effect {
+  background: oklch(1 0 0 / 0.7);
+  backdrop-filter: blur(12px);
+  border: 1px solid oklch(1 0 0 / 0.2);
+}
+
+.dark .glass-effect {
+  background: oklch(0.2 0 0 / 0.5);
+  border: 1px solid oklch(1 0 0 / 0.1);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, hsl(173, 58%, 39%), hsl(43, 74%, 66%), hsl(27, 87%, 67%));
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+/* Gradient backgrounds */
+.gradient-bg-user {
+  background: linear-gradient(135deg, hsl(173, 58%, 39%), hsl(43, 74%, 66%));
+}
+
+.gradient-bg-brand {
+  background: linear-gradient(135deg, hsl(173, 58%, 39%) 0%, hsl(43, 74%, 66%) 50%, hsl(27, 87%, 67%) 100%);
+}
+
+/* Animations */
 @keyframes fade-in-up {
   0% {
     opacity: 0;
@@ -149,6 +210,106 @@
   }
 }
 
+@keyframes fade-in {
+  0% {
+    opacity: 0;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+
+@keyframes slide-in-right {
+  0% {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulse-glow {
+  0%, 100% {
+    box-shadow: 0 0 20px oklch(0.7 0.15 180 / 0.3);
+  }
+  50% {
+    box-shadow: 0 0 30px oklch(0.7 0.15 180 / 0.5);
+  }
+}
+
 .animate-fade-in-up {
-  animation: fade-in-up 2s ease-out;
+  animation: fade-in-up 0.5s ease-out;
+}
+
+.animate-fade-in {
+  animation: fade-in 0.3s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slide-in-right 0.4s ease-out;
+}
+
+/* Focus glow effect */
+.focus-glow:focus-within {
+  box-shadow: 0 0 0 3px oklch(0.7 0.15 180 / 0.2), 0 8px 24px oklch(0 0 0 / 0.12);
+  transition: box-shadow 0.2s ease;
+}
+
+/* Message bubble styles */
+.message-bubble {
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.message-bubble:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px oklch(0 0 0 / 0.08);
+}
+
+/* Avatar styles */
+.avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  font-weight: 600;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.avatar-user {
+  background: linear-gradient(135deg, hsl(173, 58%, 39%), hsl(43, 74%, 66%));
+  color: white;
+}
+
+.avatar-assistant {
+  background: linear-gradient(135deg, hsl(197, 37%, 24%), hsl(173, 58%, 39%));
+  color: white;
+}
+
+/* Suggested prompt buttons */
+.prompt-button {
+  transition: all 0.2s ease;
+  border: 1px solid oklch(0.85 0 0);
+  background: oklch(1 0 0);
+}
+
+.prompt-button:hover {
+  border-color: hsl(173, 58%, 39%);
+  background: oklch(0.98 0.01 180);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px oklch(0 0 0 / 0.1);
+}
+
+.dark .prompt-button {
+  background: oklch(0.25 0 0);
+  border-color: oklch(0.35 0 0);
+}
+
+.dark .prompt-button:hover {
+  background: oklch(0.3 0.02 180);
+  border-color: hsl(173, 58%, 39%);
 }

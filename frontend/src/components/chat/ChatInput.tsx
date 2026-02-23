@@ -53,7 +53,7 @@ export function ChatInput({
     <div className={`p-4 w-full ${className}`}>
       <form
         onSubmit={handleSubmit}
-        className="flex space-x-2 w-full items-end bg-white rounded-lg shadow-lg border border-gray-200 p-3"
+        className="flex space-x-3 w-full items-end glass-effect rounded-2xl shadow-xl p-4 focus-glow transition-all duration-200"
       >
         <Textarea
           ref={textareaRef}
@@ -62,12 +62,16 @@ export function ChatInput({
           onKeyDown={handleKeyDown}
           placeholder="Type your message... (Ctrl+Enter for new line)"
           disabled={isLoading}
-          className="flex-1 min-h-[40px] max-h-[200px] resize-none py-2"
+          className="flex-1 min-h-[40px] max-h-[200px] resize-none py-2 bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0"
           rows={1}
           autoFocus
         />
 
-        <Button type="submit" disabled={!input.trim() || isLoading} className="h-10">
+        <Button 
+          type="submit" 
+          disabled={!input.trim() || isLoading} 
+          className="h-11 px-6 rounded-xl gradient-bg-brand hover:opacity-90 transition-all duration-200 shadow-md hover:shadow-lg hover:scale-105"
+        >
           {isLoading ? (
             <>
               <Loader2Icon className="mr-2 h-4 w-4 animate-spin" />

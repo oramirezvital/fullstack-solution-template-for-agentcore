@@ -21,12 +21,12 @@ export function ChatMessages({
 }: ChatMessagesProps) {
   return (
     <div
-      className={`h-full p-4 space-y-4 w-full ${
+      className={`h-full px-6 py-8 space-y-2 w-full ${
         messages.length > 0 ? "overflow-y-auto" : "overflow-hidden"
-      }`}
+      } scroll-smooth`}
     >
       {messages.length === 0 ? (
-        <div className="flex items-center justify-center h-full text-gray-400">
+        <div className="flex items-center justify-center h-full text-gray-400 dark:text-gray-500">
           Start a new conversation
         </div>
       ) : (

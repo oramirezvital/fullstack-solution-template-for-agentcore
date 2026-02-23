@@ -23,19 +23,32 @@ export function ChatHeader({ title, onNewChat, canStartNewChat }: ChatHeaderProp
   const { isAuthenticated, signOut } = useAuth()
 
   return (
-    <header className="flex items-center justify-between p-4 border-b w-full">
-      <div className="flex items-center">
-        <h1 className="text-xl font-bold">{title || "Fullstack AgentCore Solution Template"}</h1>
+    <header className="flex items-center justify-between px-6 py-4 border-b w-full glass-effect backdrop-blur-md">
+      <div className="flex items-center gap-3">
+        {/* Modern logo/icon */}
+        <div className="w-10 h-10 rounded-xl gradient-bg-brand flex items-center justify-center shadow-lg">
+          <span className="text-white font-bold text-lg">F</span>
+        </div>
+        <h1 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent">
+          {title || "FAST Chat"}
+        </h1>
       </div>
-      <div className="flex items-center gap-2">
-        <Button onClick={onNewChat} variant="outline" className="gap-2" disabled={!canStartNewChat}>
+      <div className="flex items-center gap-3">
+        <Button 
+          onClick={onNewChat} 
+          variant="outline" 
+          className="gap-2 rounded-full hover:scale-105 transition-transform duration-200 shadow-sm" 
+          disabled={!canStartNewChat}
+        >
           <Plus className="h-4 w-4" />
           New Chat
         </Button>
         {isAuthenticated && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline">Logout</Button>
+              <Button variant="outline" className="rounded-full hover:scale-105 transition-transform duration-200 shadow-sm">
+                Logout
+              </Button>
             </AlertDialogTrigger>
             <AlertDialogContent>
               <AlertDialogHeader>

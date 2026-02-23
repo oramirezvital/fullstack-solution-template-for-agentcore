@@ -265,14 +265,27 @@ export default function ChatInterface() {
   // Check if there are any assistant messages
   const hasAssistantMessages = messages.some((message) => message.role === "assistant")
 
+  // Suggested prompts for quick start
+  const suggestedPrompts = [
+    "What can you help me with?",
+    "Tell me about your capabilities",
+    "How does this system work?",
+    "Show me an example"
+  ]
+
+  const handlePromptClick = (prompt: string) => {
+    setInput(prompt)
+    sendMessage(prompt)
+  }
+
   return (
     <div className="flex flex-col h-screen w-full">
       {/* Fixed header */}
       <div className="flex-none">
         <ChatHeader onNewChat={startNewChat} canStartNewChat={hasAssistantMessages} />
         {error && (
-          <div className="bg-red-50 border-l-4 border-red-500 p-4 mx-4 mt-2">
-            <p className="text-sm text-red-700">{error}</p>
+          <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 mx-4 mt-2 rounded-r-lg animate-slide-in-right">
+            <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
           </div>
         )}
       </div>
@@ -285,9 +298,35 @@ export default function ChatInterface() {
           <div className="grow" />
 
           {/* Centered welcome message */}
-          <div className="text-center mb-6">
-            <h2 className="text-2xl font-bold text-gray-800">Welcome to FAST Chat</h2>
-            <p className="text-gray-600 mt-2">Ask me anything to get started</p>
+          <div className="text-center mb-8 px-4 animate-fade-in-up">
+            <div className="mb-4">
+              <div className="w-20 h-20 mx-auto rounded-3xl gradient-bg-brand flex items-center justify-center shadow-2xl mb-6">
+                <span className="text-white font-bold text-4xl">F</span>
+              </div>
+            </div>
+            <h2 className="text-4xl font-bold gradient-text mb-3">
+              Welcome to FAST Chat
+            </h2>
+            <p className="text-gray-600 dark:text-gray-400 text-lg mb-8">
+              Your intelligent assistant powered by AWS Bedrock AgentCore
+            </p>
+            
+            {/* Suggested prompts */}
+            <div className="max-w-2xl mx-auto mb-8">
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Try asking:</p>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                {suggestedPrompts.map((prompt, index) => (
+                  <button
+                    key={index}
+                    onClick={() => handlePromptClick(prompt)}
+                    className="prompt-button px-4 py-3 rounded-xl text-left text-sm text-gray-700 dark:text-gray-300"
+                    disabled={isLoading}
+                  >
+                    {prompt}
+                  </button>
+                ))}
+              </div>
+            </div>
           </div>
 
           {/* Centered input */}
