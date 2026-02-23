@@ -178,7 +178,9 @@ export function MarkdownRenderer({ content }: { content: string }) {
     chartMatches.forEach(({ json, index }) => {
       // Add text before the chart
       if (index > lastIndex) {
-        const textBefore = content.substring(lastIndex, index).trim()
+        let textBefore = content.substring(lastIndex, index)
+        // Remove any "json" prefix that might appear right before the chart
+        textBefore = textBefore.replace(/json\s*$/, '').trim()
         if (textBefore) {
           parts.push({ type: 'text', content: textBefore })
         }
@@ -191,9 +193,19 @@ export function MarkdownRenderer({ content }: { content: string }) {
     
     // Add remaining text after the last chart
     if (lastIndex < content.length) {
-      const textAfter = content.substring(lastIndex).trim()
+      let textAfter = content.substring(lastIndex).trim()
       if (textAfter) {
-        parts.push({ type: 'text', content: textAfter })
+        // Remove leading code fence markers (```) that might wrap the markdown
+        textAfter = textAfter.replace(/^```+\s*/, '')
+        // Remove trailing code fence markers
+        textAfter = textAfter.replace(/\s*```+$/, '')
+        textAfter = textAfter.trim()
+        
+        console.log('[MarkdownRenderer] Text after chart (cleaned):', textAfter.substring(0, 100))
+        
+        if (textAfter) {
+          parts.push({ type: 'text', content: textAfter })
+        }
       }
     }
     
@@ -207,14 +219,8 @@ export function MarkdownRenderer({ content }: { content: string }) {
               return <ChartRenderer key={idx} chartSpec={chartSpec} />
             } catch (e) {
               console.error('Failed to parse chart JSON:', e)
-              // Fallback to text if parsing fails
-              return (
-                <div key={idx} className="markdown-body leading-relaxed [&_p]:my-1.5 [&_ul]:my-1.5 [&_ul]:pl-5 [&_ul]:list-disc [&_ol]:my-1.5 [&_ol]:pl-5 [&_ol]:list-decimal [&_li]:my-0.5 [&_h1]:text-lg [&_h1]:font-semibold [&_h1]:mt-3 [&_h1]:mb-1.5 [&_h2]:text-base [&_h2]:font-semibold [&_h2]:mt-2.5 [&_h2]:mb-1 [&_h3]:text-sm [&_h3]:font-semibold [&_h3]:mt-2 [&_h3]:mb-1 [&_blockquote]:border-l-2 [&_blockquote]:border-gray-300 [&_blockquote]:pl-3 [&_blockquote]:my-1.5 [&_blockquote]:text-gray-600 [&_table]:my-2 [&_table]:min-w-full [&_table]:border-collapse [&_table]:text-xs [&_th]:px-2 [&_th]:py-1 [&_th]:bg-gray-100 [&_th]:border [&_th]:border-gray-300 [&_th]:text-left [&_th]:font-medium [&_td]:px-2 [&_td]:py-1 [&_td]:border [&_td]:border-gray-300 [&>*:first-child]:mt-0 [&>*:last-child]:mb-0">
-                  <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
-                    {completePartialMarkdown(part.content)}
-                  </ReactMarkdown>
-                </div>
-              )
+              // Don't render anything if chart parsing fails - it's already been extracted
+              return null
             }
           }
           return (

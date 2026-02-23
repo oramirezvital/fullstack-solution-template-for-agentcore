@@ -193,23 +193,27 @@ When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
    data_values = [204.08, 199.6, 198.79, ...]
 
 3. RETURN CHART JSON in your response:
-   CRITICAL: You MUST wrap the JSON in a markdown code block
+   CRITICAL: Wrap the JSON in a proper markdown code block
    IMPORTANT: Include the JSON directly in YOUR response text, NOT as Code Interpreter output!
    
-   Example response format:
+   The code block must start with three backticks and the word json on the same line.
+   Then the JSON object on new lines.
+   Then three backticks to close.
    
-   Here's the 1-week price trend for Amazon:
+   Example - your response should look EXACTLY like this:
    
-   [Use three backticks followed by "json" to start the code block]
+   Here's the 1-week price trend for Tesla:
+   
+   (three backticks)json
    {
      "type": "chart",
      "chartType": "line",
-     "title": "Amazon (AMZN) - 1 Week Price Trend",
+     "title": "Tesla (TSLA) - 1 Week Price Trend",
      "data": {
-       "labels": ["Feb 11", "Feb 12", "Feb 13", "Feb 17", "Feb 18", "Feb 19", "Feb 20"],
+       "labels": ["Feb 11", "Feb 12", "Feb 13"],
        "datasets": [{
-         "label": "AMZN Price (USD)",
-         "data": [204.08, 199.6, 198.79, 201.15, 204.79, 204.86, 210.11],
+         "label": "TSLA Price (USD)",
+         "data": [448.25, 451.90, 455.30],
          "color": "#3fb950"
        }]
      },
@@ -218,12 +222,13 @@ When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
        "xAxisLabel": "Date"
      }
    }
-   [Use three backticks to close the code block]
+   (three backticks)
    
-   The frontend will automatically detect this JSON and render an interactive chart.
+   Based on the data, Tesla's price increased by 1.6% this week.
    
    IMPORTANT: 
-   - Always wrap in code block with language "json"
+   - Use proper markdown code fence (three backticks, not the word "backticks")
+   - Put "json" immediately after the opening backticks
    - Include JSON in YOUR message text, NOT in Code Interpreter output
    - You can use Code Interpreter to process data, but return the final chart JSON in your own response
 
