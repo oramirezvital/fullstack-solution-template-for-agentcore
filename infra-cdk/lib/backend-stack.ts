@@ -39,6 +39,7 @@ export class BackendStack extends cdk.NestedStack {
   private userPool: cognito.IUserPool
   private machineClient: cognito.UserPoolClient
   private agentRuntime: agentcore.Runtime
+  private gatewayUrl: string
 
   constructor(scope: Construct, id: string, props: BackendStackProps) {
     super(scope, id, props)
@@ -61,19 +62,21 @@ export class BackendStack extends cdk.NestedStack {
       props.userPoolClientId
     )
 
-    // Create Machine-to-Machine authentication components
-    // NOTE: Gateway infrastructure removed - Investment Advisor uses Alpha Vantage MCP only
-    // this.createMachineAuthentication(props.config)
+    // Create Machine-to-Machine authentication components for Gateway
+    this.createMachineAuthentication(props.config)
 
     // DEPLOYMENT ORDER EXPLANATION:
     // 1. Cognito User Pool & Client (created in separate CognitoStack)
-    // 2. AgentCore Runtime (uses Alpha Vantage MCP for financial data)
+    // 2. Machine Client for Gateway authentication
+    // 3. AgentCore Gateway with chart generation tool
+    // 4. AgentCore Runtime (uses Gateway for charts + Alpha Vantage MCP for financial data)
     //
-    // Gateway infrastructure has been removed as the Investment Advisor agent
-    // connects directly to Alpha Vantage MCP server for financial data.
+    // The Investment Advisor agent uses:
+    // - Gateway: Chart generation tool (wraps Chart.js MCP server)
+    // - Alpha Vantage MCP: Financial data (direct connection, no Gateway)
 
-    // Create AgentCore Gateway (REMOVED - using Alpha Vantage MCP instead)
-    // this.createAgentCoreGateway(props.config)
+    // Create AgentCore Gateway with chart generation tool
+    this.createAgentCoreGateway(props.config)
 
     // Create AgentCore Runtime resources
     this.createAgentCoreRuntime(props.config)
@@ -302,12 +305,42 @@ export class BackendStack extends cdk.NestedStack {
       })
     )
 
+    // Add Gateway authentication permissions (SSM and Secrets Manager)
+    agentRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "GatewayAuthenticationAccess",
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "ssm:GetParameter",
+          "ssm:GetParameters",
+        ],
+        resources: [
+          `arn:aws:ssm:${this.region}:${this.account}:parameter/${config.stack_name_base}/*`,
+        ],
+      })
+    )
+
+    agentRole.addToPolicy(
+      new iam.PolicyStatement({
+        sid: "GatewaySecretAccess",
+        effect: iam.Effect.ALLOW,
+        actions: [
+          "secretsmanager:GetSecretValue",
+        ],
+        resources: [
+          `arn:aws:secretsmanager:${this.region}:${this.account}:secret:/${config.stack_name_base}/*`,
+        ],
+      })
+    )
+
     // Environment variables for the runtime
     const envVars: { [key: string]: string } = {
       AWS_REGION: stack.region,
       AWS_DEFAULT_REGION: stack.region,
       MEMORY_ID: memoryId,
       ALPHA_VANTAGE_API_KEY: "6I7SGM9D7G40YB1I", // Alpha Vantage API key for MCP server
+      STACK_NAME: config.stack_name_base, // Stack name for Gateway authentication
+      GATEWAY_URL: this.gatewayUrl, // Gateway URL for chart generation
     }
 
     // Create the runtime using L2 construct
@@ -382,7 +415,25 @@ export class BackendStack extends cdk.NestedStack {
       description: "Cognito User Pool Client ID",
     })
 
-    // Machine client parameters removed - no longer needed without Gateway
+    // Store machine client ID in SSM for Gateway authentication
+    new ssm.StringParameter(this, "MachineClientIdParam", {
+      parameterName: `/${config.stack_name_base}/machine_client_id`,
+      stringValue: this.machineClient.userPoolClientId,
+      description: "Machine client ID for Gateway OAuth2 authentication",
+    })
+
+    // Store machine client secret in Secrets Manager (more secure than SSM for secrets)
+    const machineClientSecret = new secretsmanager.Secret(this, "MachineClientSecret", {
+      secretName: `/${config.stack_name_base}/machine_client_secret`,
+      description: "Machine client secret for Gateway OAuth2 authentication",
+      secretStringValue: this.machineClient.userPoolClientSecret,
+    })
+
+    // Output the secret ARN for reference
+    new cdk.CfnOutput(this, "MachineClientSecretArn", {
+      value: machineClientSecret.secretArn,
+      description: "ARN of the machine client secret",
+    })
     
     // Use the correct Cognito domain format from the passed domain
     new ssm.StringParameter(this, "CognitoDomainParam", {
@@ -555,32 +606,36 @@ export class BackendStack extends cdk.NestedStack {
   }
 
   private createAgentCoreGateway(config: AppConfig): void {
-    // Create sample tool Lambda
-    const toolLambda = new lambda.Function(this, "SampleToolLambda", {
-      runtime: lambda.Runtime.PYTHON_3_13,
-      handler: "sample_tool_lambda.handler",
-      code: lambda.Code.fromAsset(path.join(__dirname, "../../gateway/tools/sample_tool")),
-      timeout: cdk.Duration.seconds(30),
-      logGroup: new logs.LogGroup(this, "SampleToolLambdaLogGroup", {
-        logGroupName: `/aws/lambda/${config.stack_name_base}-sample-tool`,
-        retention: logs.RetentionDays.ONE_WEEK,
-        removalPolicy: cdk.RemovalPolicy.DESTROY,
-      }),
-    })
+    /**
+     * Create AgentCore Gateway with Chart Generation Tool
+     * 
+     * This Gateway provides a single tool: generate_chart
+     * The tool is implemented as a Lambda function that wraps the Chart.js MCP server.
+     * 
+     * Architecture:
+     * Agent → Gateway → Chart Lambda → Chart.js MCP Server → HTML Chart
+     * 
+     * The Lambda handles:
+     * - Accepting chart parameters from the agent
+     * - Calling Chart.js MCP server via stdio transport
+     * - Returning interactive HTML charts
+     */
 
-    // Create stock tool Lambda with Alpha Vantage API
-    const stockToolLambda = new PythonFunction(this, "StockToolLambda", {
-      runtime: lambda.Runtime.PYTHON_3_13,
-      handler: "handler",
-      entry: path.join(__dirname, "../../gateway/tools/stock_tool"),
-      index: "stock_tool_lambda.py",
-      timeout: cdk.Duration.seconds(60),
-      memorySize: 256,
-      environment: {
-        ALPHA_VANTAGE_API_KEY: "6I7SGM9D7G40YB1I",
-      },
-      logGroup: new logs.LogGroup(this, "StockToolLambdaLogGroup", {
-        logGroupName: `/aws/lambda/${config.stack_name_base}-stock-tool`,
+    // Create Chart Tool Lambda with Node.js support
+    // This Lambda needs Node.js to run the Chart.js MCP server via npx
+    // We use Docker to build a custom image with both Python and Node.js
+    const chartToolLambda = new lambda.DockerImageFunction(this, "ChartToolLambda", {
+      code: lambda.DockerImageCode.fromImageAsset(
+        path.join(__dirname, "../../gateway/tools/chart_tool"),
+        {
+          platform: ecr_assets.Platform.LINUX_ARM64,
+        }
+      ),
+      timeout: cdk.Duration.seconds(30),
+      memorySize: 512,
+      architecture: lambda.Architecture.ARM_64,
+      logGroup: new logs.LogGroup(this, "ChartToolLambdaLogGroup", {
+        logGroupName: `/aws/lambda/${config.stack_name_base}-chart-tool`,
         retention: logs.RetentionDays.ONE_WEEK,
         removalPolicy: cdk.RemovalPolicy.DESTROY,
       }),
@@ -589,12 +644,11 @@ export class BackendStack extends cdk.NestedStack {
     // Create comprehensive IAM role for gateway
     const gatewayRole = new iam.Role(this, "GatewayRole", {
       assumedBy: new iam.ServicePrincipal("bedrock-agentcore.amazonaws.com"),
-      description: "Role for AgentCore Gateway with comprehensive permissions",
+      description: "Role for AgentCore Gateway with chart generation tool",
     })
 
     // Lambda invoke permission
-    toolLambda.grantInvoke(gatewayRole)
-    stockToolLambda.grantInvoke(gatewayRole)
+    chartToolLambda.grantInvoke(gatewayRole)
 
     // Bedrock permissions (region-agnostic)
     gatewayRole.addToPolicy(
@@ -639,20 +693,15 @@ export class BackendStack extends cdk.NestedStack {
       })
     )
 
-    // Load tool specification from JSON file
-    const toolSpecPath = path.join(__dirname, "../../gateway/tools/sample_tool/tool_spec.json")
-    const apiSpec = JSON.parse(require("fs").readFileSync(toolSpecPath, "utf8"))
-
-    // Load stock tool specification
-    const stockToolSpecPath = path.join(__dirname, "../../gateway/tools/stock_tool/tool_spec.json")
-    const stockApiSpec = JSON.parse(require("fs").readFileSync(stockToolSpecPath, "utf8"))
+    // Load chart tool specification from JSON file
+    const chartToolSpecPath = path.join(__dirname, "../../gateway/tools/chart_tool/tool_spec.json")
+    const chartToolSpec = JSON.parse(fs.readFileSync(chartToolSpecPath, "utf8"))
 
     // Cognito OAuth2 configuration for gateway
     const cognitoIssuer = `https://cognito-idp.${this.region}.amazonaws.com/${this.userPool.userPoolId}`
     const cognitoDiscoveryUrl = `${cognitoIssuer}/.well-known/openid-configuration`
 
     // Create Gateway using L1 construct (CfnGateway)
-    // This replaces the Custom Resource approach with native CloudFormation support
     const gateway = new bedrockagentcore.CfnGateway(this, "AgentCoreGateway", {
       name: `${config.stack_name_base}-gateway`,
       roleArn: gatewayRole.roleArn,
@@ -660,8 +709,6 @@ export class BackendStack extends cdk.NestedStack {
       protocolConfiguration: {
         mcp: {
           supportedVersions: ["2025-03-26"],
-          // Optional: Enable semantic search for tools
-          // searchType: "SEMANTIC",
         },
       },
       authorizerType: "CUSTOM_JWT",
@@ -671,42 +718,20 @@ export class BackendStack extends cdk.NestedStack {
           discoveryUrl: cognitoDiscoveryUrl,
         },
       },
-      description: "AgentCore Gateway with MCP protocol and JWT authentication",
+      description: "AgentCore Gateway with chart generation tool",
     })
 
-    // Create Gateway Target using L1 construct (CfnGatewayTarget)
-    const gatewayTarget = new bedrockagentcore.CfnGatewayTarget(this, "GatewayTarget", {
+    // Create Chart Tool Gateway Target using L1 construct
+    const chartGatewayTarget = new bedrockagentcore.CfnGatewayTarget(this, "ChartGatewayTarget", {
       gatewayIdentifier: gateway.attrGatewayIdentifier,
-      name: "sample-tool-target",
-      description: "Sample tool Lambda target",
+      name: "chart-tool-target",  // Must match pattern: alphanumeric and hyphens only
+      description: "Chart generation tool Lambda target",
       targetConfiguration: {
         mcp: {
           lambda: {
-            lambdaArn: toolLambda.functionArn,
+            lambdaArn: chartToolLambda.functionArn,
             toolSchema: {
-              inlinePayload: apiSpec,
-            },
-          },
-        },
-      },
-      credentialProviderConfigurations: [
-        {
-          credentialProviderType: "GATEWAY_IAM_ROLE",
-        },
-      ],
-    })
-
-    // Create Stock Tool Gateway Target
-    const stockGatewayTarget = new bedrockagentcore.CfnGatewayTarget(this, "StockGatewayTarget", {
-      gatewayIdentifier: gateway.attrGatewayIdentifier,
-      name: "stock-tool-target",
-      description: "Stock information tool Lambda target",
-      targetConfiguration: {
-        mcp: {
-          lambda: {
-            lambdaArn: stockToolLambda.functionArn,
-            toolSchema: {
-              inlinePayload: stockApiSpec,
+              inlinePayload: [chartToolSpec],  // Must be an array, not a single object
             },
           },
         },
@@ -719,18 +744,19 @@ export class BackendStack extends cdk.NestedStack {
     })
 
     // Ensure proper creation order
-    gatewayTarget.addDependency(gateway)
-    stockGatewayTarget.addDependency(gateway)
-    gateway.node.addDependency(toolLambda)
-    gateway.node.addDependency(stockToolLambda)
+    chartGatewayTarget.addDependency(gateway)
+    gateway.node.addDependency(chartToolLambda)
     gateway.node.addDependency(this.machineClient)
     gateway.node.addDependency(gatewayRole)
+
+    // Store Gateway URL for use in Runtime environment variables
+    this.gatewayUrl = gateway.attrGatewayUrl
 
     // Store Gateway URL in SSM for runtime access
     new ssm.StringParameter(this, "GatewayUrlParam", {
       parameterName: `/${config.stack_name_base}/gateway_url`,
       stringValue: gateway.attrGatewayUrl,
-      description: "AgentCore Gateway URL",
+      description: "AgentCore Gateway URL for chart generation",
     })
 
     // Output gateway information
@@ -749,24 +775,14 @@ export class BackendStack extends cdk.NestedStack {
       description: "AgentCore Gateway ARN",
     })
 
-    new cdk.CfnOutput(this, "GatewayTargetId", {
-      value: gatewayTarget.ref,
-      description: "AgentCore Gateway Target ID",
+    new cdk.CfnOutput(this, "ChartGatewayTargetId", {
+      value: chartGatewayTarget.ref,
+      description: "Chart Tool Gateway Target ID",
     })
 
-    new cdk.CfnOutput(this, "StockGatewayTargetId", {
-      value: stockGatewayTarget.ref,
-      description: "Stock Tool Gateway Target ID",
-    })
-
-    new cdk.CfnOutput(this, "ToolLambdaArn", {
-      description: "ARN of the sample tool Lambda",
-      value: toolLambda.functionArn,
-    })
-
-    new cdk.CfnOutput(this, "StockToolLambdaArn", {
-      description: "ARN of the stock tool Lambda",
-      value: stockToolLambda.functionArn,
+    new cdk.CfnOutput(this, "ChartToolLambdaArn", {
+      description: "ARN of the chart tool Lambda",
+      value: chartToolLambda.functionArn,
     })
   }
 

@@ -1,0 +1,7 @@
+# Chart Tool Lambda Dependencies
+# These packages are required for the Lambda function to communicate
+# with the Chart.js MCP server
+
+# MCP (Model Context Protocol) client library
+# Used to establish stdio communication with Chart.js MCP server
+mcp>=1.0.0

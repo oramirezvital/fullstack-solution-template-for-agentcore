@@ -39,7 +39,8 @@ const components: Record<string, any> = {
       const language = match[1]
       
       // Render HTML code blocks as actual HTML for interactive charts
-      if (language === 'html') {
+      // This handles both ```html blocks and plain HTML that looks like Chart.js output
+      if (language === 'html' || (codeString.includes('<div id="chart-container-') && codeString.includes('</script>'))) {
         return (
           <div className="my-3">
             <div className="flex items-center justify-between px-3 py-1 bg-gray-100 border border-gray-300 rounded-t-md">
@@ -72,6 +73,24 @@ const components: Record<string, any> = {
         </div>
       )
     }
+    
+    // Handle inline code or code blocks without language
+    // Check if it's Chart.js HTML even without language specification
+    if (codeString.includes('<div id="chart-container-') && codeString.includes('</script>')) {
+      return (
+        <div className="my-3">
+          <div className="flex items-center justify-between px-3 py-1 bg-gray-100 border border-gray-300 rounded-t-md">
+            <span className="text-xs text-gray-500">Interactive Chart</span>
+            <CopyButton text={codeString} />
+          </div>
+          <div 
+            className="border border-t-0 border-gray-300 rounded-b-md p-4 bg-white"
+            dangerouslySetInnerHTML={{ __html: codeString }}
+          />
+        </div>
+      )
+    }
+    
     return <code className="px-1 py-0.5 bg-gray-200/60 rounded text-[0.85em] font-mono">{children}</code>
   },
   pre({ children }: { children?: React.ReactNode }) {

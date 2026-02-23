@@ -23,37 +23,6 @@ from utils.auth import extract_user_id_from_context
 app = BedrockAgentCoreApp()
 
 
-def create_chartjs_mcp_client() -> MCPClient:
-    """
-    Create MCP client for Chart.js chart generation.
-    
-    The Chart.js MCP server generates beautiful, professional charts using Chart.js v4.
-    It supports multiple chart types (bar, line, pie, doughnut, scatter, bubble, radar, polar)
-    and can output both PNG images and interactive HTML divs.
-    
-    The server runs as a subprocess using stdio transport, which is the standard
-    way to communicate with command-line MCP servers.
-    
-    Returns:
-        MCPClient: Configured client for Chart.js MCP server
-    """
-    print("[AGENT] Creating Chart.js MCP client...")
-    
-    # Chart.js MCP server runs via npx with stdio transport
-    chartjs_client = MCPClient(
-        lambda: stdio_client(
-            StdioServerParameters(
-                command="npx",
-                args=["@ax-crew/chartjs-mcp-server"]
-            )
-        ),
-        prefix="chartjs",
-    )
-    
-    print("[AGENT] Chart.js MCP client created successfully")
-    return chartjs_client
-
-
 def create_alpha_vantage_mcp_client() -> MCPClient:
     """
     Create MCP client for Alpha Vantage financial data API.
@@ -87,6 +56,49 @@ def create_alpha_vantage_mcp_client() -> MCPClient:
     
     print("[AGENT] Alpha Vantage MCP client created successfully")
     return alpha_vantage_client
+
+
+def create_gateway_mcp_client() -> MCPClient:
+    """
+    Create MCP client for AgentCore Gateway (chart generation tool).
+    
+    The Gateway provides access to the generate_chart tool, which is implemented
+    as a Lambda function that wraps the Chart.js MCP server. This architecture
+    solves MCP serialization issues by having the Lambda handle the Chart.js
+    communication.
+    
+    The Gateway uses OAuth2 client credentials flow for authentication via Cognito.
+    
+    Returns:
+        MCPClient: Configured client for AgentCore Gateway
+        
+    Raises:
+        ValueError: If GATEWAY_URL environment variable is not set
+        Exception: If OAuth2 token retrieval fails
+    """
+    from utils.auth import get_gateway_access_token
+    
+    gateway_url = os.environ.get("GATEWAY_URL")
+    if not gateway_url:
+        raise ValueError("GATEWAY_URL environment variable is required")
+    
+    print("[AGENT] Creating Gateway MCP client...")
+    
+    # Get OAuth2 access token for Gateway authentication
+    # This uses the machine client credentials stored in SSM
+    access_token = get_gateway_access_token()
+    
+    # Create MCP client for Gateway with JWT authentication
+    gateway_client = MCPClient(
+        lambda: streamablehttp_client(
+            url=gateway_url,
+            headers={"Authorization": f"Bearer {access_token}"}
+        ),
+        prefix="gateway",
+    )
+    
+    print("[AGENT] Gateway MCP client created successfully")
+    return gateway_client
 
 
 def create_investment_advisor_agent(user_id: str, session_id: str) -> Agent:
@@ -129,11 +141,12 @@ YOUR CAPABILITIES:
    - NOTE: Free tier has rate limits (5 calls/minute, 25 calls/day). Use TIME_SERIES_DAILY 
      for historical data instead of multiple GLOBAL_QUOTE calls.
 
-2. CHART.JS MCP SERVER (chartjs_generateChart tool):
-   - Professional chart generation using Chart.js v4
+2. GATEWAY CHART GENERATION (gateway_generate_chart tool):
+   - Professional chart generation using Chart.js v4 via Gateway Lambda
    - Supports 8 chart types: line, bar, pie, doughnut, scatter, bubble, radar, polar
    - Outputs interactive HTML divs with hover tooltips and animations
    - Perfect for visualizing financial data and trends
+   - Gateway Lambda handles Chart.js MCP communication internally
 
 3. CODE INTERPRETER:
    - Perform statistical analysis and financial calculations
@@ -167,52 +180,51 @@ When a user asks about portfolio performance:
 
 CHART GENERATION WORKFLOW:
 
-When user asks for a chart (e.g., "Chart the 6-month price trend for AMAZON"):
+When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
 
 1. FETCH DATA from Alpha Vantage:
    - Use TIME_SERIES_DAILY for historical price data
    - Extract dates and prices from the response
-   - Process data into arrays for charting
+   - Process data into simple arrays
 
-2. PREPARE CHART CONFIGURATION:
-   Create a Chart.js configuration object. This MUST be a proper JSON object, NOT a string.
+2. PREPARE DATA in simple format:
+   labels = ["Feb 11", "Feb 12", "Feb 13", ...]
+   datasets = [{
+     "label": "AMZN Price (USD)",
+     "data": [204.08, 199.6, 198.79, ...],
+     "borderColor": "#3fb950",
+     "backgroundColor": "rgba(63, 185, 80, 0.1)",
+     "fill": true,
+     "tension": 0.3
+   }]
+
+3. CALL gateway_generate_chart TOOL:
+   Use the Gateway chart tool with these parameters:
+   - chartType: "line" (for trends), "bar" (for comparisons), etc.
+   - data: {labels: [...], datasets: [...]}
+   - title: "Amazon (AMZN) - 1 Week Price Trend"
+   - options: (optional) additional Chart.js customization
    
-   EXAMPLE CONFIGURATION:
+   EXAMPLE TOOL CALL:
    {
-     "type": "line",
+     "chartType": "line",
      "data": {
-       "labels": ["Sep 29", "Oct 02", "Oct 07"],
+       "labels": ["Feb 11", "Feb 12", "Feb 13"],
        "datasets": [{
          "label": "AMZN Price (USD)",
-         "data": [222.17, 222.41, 221.78],
-         "borderColor": "#58a6ff",
-         "backgroundColor": "rgba(88, 166, 255, 0.2)",
-         "fill": true
+         "data": [204.08, 199.6, 198.79],
+         "borderColor": "#3fb950",
+         "backgroundColor": "rgba(63, 185, 80, 0.1)",
+         "fill": true,
+         "tension": 0.3
        }]
      },
-     "options": {
-       "responsive": true,
-       "plugins": {
-         "title": {
-           "display": true,
-           "text": "Amazon (AMZN) - 6 Month Price Trend"
-         }
-       }
-     }
+     "title": "Amazon (AMZN) - 1 Week Price Trend"
    }
-
-3. CALL chartjs_generateChart TOOL:
-   CRITICAL: When calling the tool, pass the configuration object directly, NOT as a string.
    
-   CORRECT WAY TO CALL THE TOOL:
-   Use the chartjs_generateChart tool with these exact parameters:
-   - chartConfig: <the configuration object from step 2> (as an object, not a string!)
-   - outputFormat: "html"
-   
-   DO NOT stringify the configuration. DO NOT add quotes around it.
-   The tool expects: chartConfig={...object...}, NOT chartConfig="{...string...}"
-   
-   The tool will return self-contained HTML that displays automatically in the chat
+   The tool returns interactive HTML. CRITICAL: Return the HTML directly in your response 
+   WITHOUT wrapping it in code blocks or markdown. Just paste the raw HTML output from the 
+   tool directly into your message so it renders as an interactive chart.
 
 4. PROVIDE CONTEXT:
    Along with the chart, provide a brief summary:
@@ -232,28 +244,16 @@ CHART STYLING TIPS:
 - Use green (#3fb950) for positive changes/gains
 - Use red (#f85149) for negative changes/losses
 - Use blue (#58a6ff) for neutral data
-- Add gradients for visual appeal: "rgba(88, 166, 255, 0.2)"
-- Enable tooltips for interactivity
+- Add "fill": true for area charts
+- Use "tension": 0.3-0.4 for smooth lines
 - Keep labels concise and readable
 
 IMPORTANT RULES:
-1. ALWAYS use chartjs_generateChart tool for charts - don't generate HTML manually
+1. ALWAYS use gateway_generate_chart tool for charts
 2. Fetch real data from Alpha Vantage first
-3. Process data into proper arrays (labels and data must match in length)
-4. Use outputFormat="html" for interactive charts
-5. Provide context and insights along with the chart
-6. CRITICAL: Pass chartConfig as a JSON object, NOT as a JSON string
-   - WRONG: chartConfig="{\"type\": \"line\", ...}"
-   - RIGHT: chartConfig={"type": "line", ...}
-
-CHART GENERATION RULES:
-1. When user asks for a chart, use the chartjs_generateChart tool
-2. Fetch data from Alpha Vantage first, then format for Chart.js
-3. Always use outputFormat="html" for interactive charts
+3. Process data into simple arrays (labels and datasets)
 4. Provide context and insights along with the chart
-5. Use appropriate chart types for different data (line for trends, bar for comparisons, etc.)
-6. Apply proper styling (colors, labels, tooltips)
-7. Keep charts responsive and user-friendly
+5. Use appropriate chart types for different data
 
 YOUR INVESTMENT ADVISORY APPROACH:
 
@@ -340,18 +340,18 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
         alpha_vantage_client = create_alpha_vantage_mcp_client()
         print("[AGENT] Alpha Vantage MCP client created successfully")
 
-        # Create Chart.js MCP client for visualizations
-        print("[AGENT] Creating Chart.js MCP client...")
-        chartjs_client = create_chartjs_mcp_client()
-        print("[AGENT] Chart.js MCP client created successfully")
+        # Create Gateway MCP client for chart generation
+        print("[AGENT] Creating Gateway MCP client...")
+        gateway_client = create_gateway_mcp_client()
+        print("[AGENT] Gateway MCP client created successfully")
 
-        print("[AGENT] Creating Investment Advisor agent with Alpha Vantage, Chart.js, and Code Interpreter...")
+        print("[AGENT] Creating Investment Advisor agent with Alpha Vantage, Gateway, and Code Interpreter...")
         agent = Agent(
             name="InvestmentAdvisor",
             system_prompt=system_prompt,
             tools=[
+                gateway_client,  # Gateway chart generation tool
                 alpha_vantage_client,  # Alpha Vantage financial tools
-                chartjs_client,  # Chart.js visualization tools
                 code_tools.execute_python_securely,  # Code Interpreter for calculations
             ],
             model=bedrock_model,

@@ -1,0 +1,41 @@
+{
+  "name": "generate_chart",
+  "description": "Generate interactive Chart.js visualizations for financial data. Supports multiple chart types including line charts for trends, bar charts for comparisons, pie charts for proportions, and more. Returns HTML that displays automatically in the chat interface.",
+  "inputSchema": {
+    "type": "object",
+    "properties": {
+      "chartType": {
+        "type": "string",
+        "enum": ["line", "bar", "pie", "doughnut", "scatter", "bubble", "radar", "polar"],
+        "description": "Type of chart to generate. Use 'line' for time series and trends, 'bar' for categorical comparisons, 'pie' or 'doughnut' for proportions, 'scatter' for correlations, 'bubble' for three-dimensional data, 'radar' for multi-factor comparisons, 'polar' for circular data."
+      },
+      "data": {
+        "type": "object",
+        "description": "Chart data object containing labels and datasets arrays. Labels are typically dates or categories. Datasets contain the actual data points and styling information.",
+        "properties": {
+          "labels": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "description": "Array of labels for the x-axis (e.g., dates like 'Feb 11', 'Feb 12' or categories like 'AAPL', 'GOOGL')"
+          },
+          "datasets": {
+            "type": "array",
+            "description": "Array of dataset objects. Each dataset should have: label (string), data (array of numbers), borderColor (hex color), backgroundColor (rgba color), and optional styling properties like fill, tension, pointRadius, etc."
+          }
+        },
+        "required": ["labels", "datasets"]
+      },
+      "title": {
+        "type": "string",
+        "description": "Chart title to display at the top. Should be descriptive and include the stock symbol, time period, and metric (e.g., 'Amazon (AMZN) - 1 Week Price Trend')"
+      },
+      "options": {
+        "type": "object",
+        "description": "Optional Chart.js options object for advanced customization. Can include scales configuration, additional plugins, interaction settings, etc. If not provided, sensible defaults will be used."
+      }
+    },
+    "required": ["chartType", "data", "title"]
+  }
+}
