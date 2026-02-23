@@ -299,6 +299,7 @@ export class BackendStack extends cdk.NestedStack {
       AWS_DEFAULT_REGION: stack.region,
       MEMORY_ID: memoryId,
       STACK_NAME: config.stack_name_base, // Required for agent to find SSM parameters
+      ALPHA_VANTAGE_API_KEY: "6I7SGM9D7G40YB1I", // Alpha Vantage API key for MCP server
     }
 
     // Create the runtime using L2 construct
