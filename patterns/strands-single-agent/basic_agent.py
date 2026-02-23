@@ -32,23 +32,46 @@ def create_alpha_vantage_mcp_client() -> MCPClient:
     crypto, commodities, and economic indicators. The client connects to Alpha Vantage's
     hosted MCP server using an API key for authentication.
     
+    This function creates a direct connection to Alpha Vantage's MCP server following
+    the official FAST pattern of passing MCPClient directly to the Agent. This ensures
+    proper ToolProvider interface implementation and automatic lifecycle management.
+    
+    The API key is securely retrieved from AWS Secrets Manager at runtime, ensuring
+    it is never hardcoded in the source code or exposed in git.
+    
     Returns:
         MCPClient: Configured client for Alpha Vantage MCP server
         
     Raises:
-        ValueError: If ALPHA_VANTAGE_API_KEY environment variable is not set
+        ValueError: If STACK_NAME environment variable is not set
+        Exception: If API key cannot be retrieved from Secrets Manager
     """
-    api_key = os.environ.get("ALPHA_VANTAGE_API_KEY")
-    if not api_key:
-        raise ValueError("ALPHA_VANTAGE_API_KEY environment variable is required")
+    from utils.auth import get_secret
+    
+    # Get stack name for secret path
+    stack_name = os.environ.get("STACK_NAME")
+    if not stack_name:
+        raise ValueError("STACK_NAME environment variable is required")
+    
+    print("[AGENT] Retrieving Alpha Vantage API key from Secrets Manager...")
+    
+    # Fetch API key from Secrets Manager
+    api_key = get_secret(f"/{stack_name}/alpha_vantage_api_key")
+    
+    if not api_key or api_key == "PLACEHOLDER_UPDATE_AFTER_DEPLOYMENT":
+        raise ValueError(
+            "Alpha Vantage API key not configured. "
+            "Please update the secret in AWS Secrets Manager: "
+            f"/{stack_name}/alpha_vantage_api_key"
+        )
     
     print("[AGENT] Creating Alpha Vantage MCP client...")
     
     # Alpha Vantage MCP server URL with API key authentication
     alpha_vantage_url = f"https://mcp.alphavantage.co/mcp?apikey={api_key}"
     
-    # Create MCP client for Alpha Vantage
-    # No additional headers needed as API key is in the URL
+    # Create MCP client for Alpha Vantage - direct connection, no wrapper
+    # This follows the official FAST pattern and ensures proper ToolProvider interface
     alpha_vantage_client = MCPClient(
         lambda: streamablehttp_client(url=alpha_vantage_url),
         prefix="alphavantage",
@@ -140,8 +163,16 @@ YOUR CAPABILITIES:
    - Fundamental data (COMPANY_OVERVIEW, EARNINGS, INCOME_STATEMENT, BALANCE_SHEET)
    - Market news and sentiment analysis
    - Options data, Forex, Crypto, Commodities, Economic indicators
-   - NOTE: Free tier has rate limits (5 calls/minute, 25 calls/day). Use TIME_SERIES_DAILY 
-     for historical data instead of multiple GLOBAL_QUOTE calls.
+   
+   **CRITICAL: You MUST use the Alpha Vantage MCP tools (prefixed with "alphavantage_") to access 
+   financial data. DO NOT use Code Interpreter to make direct HTTP calls to Alpha Vantage API.
+   The MCP tools provide automatic error handling and proper data formatting.**
+   
+   Example tool calls:
+   - alphavantage_TIME_SERIES_DAILY(symbol="AAPL", outputsize="compact")
+   - alphavantage_GLOBAL_QUOTE(symbol="TSLA")
+   - alphavantage_RSI(symbol="MSFT", interval="daily", time_period="14", series_type="close")
+   - alphavantage_COMPANY_OVERVIEW(symbol="GOOGL")
 
 2. CHART GENERATION (JSON format):
    - Return chart data as structured JSON in your response
@@ -150,7 +181,11 @@ YOUR CAPABILITIES:
    - Perfect for visualizing financial data and trends
 
 3. CODE INTERPRETER:
-   - Perform statistical analysis and financial calculations
+   - Perform statistical analysis and financial calculations ONLY
+   - Process and transform data AFTER fetching it from Alpha Vantage MCP tools
+   - Build custom financial models and projections
+   - **DO NOT use Code Interpreter to make HTTP requests to Alpha Vantage API**
+   - **DO NOT use urllib, requests, or any HTTP library to call Alpha Vantage directly**
    - Process and transform data for chart generation
    - Build custom financial models and projections
 
@@ -171,7 +206,7 @@ When a user reports an investment:
 
 When a user asks about portfolio performance:
 1. Recall their investments from your memory
-2. Fetch current prices from Alpha Vantage (use GLOBAL_QUOTE for latest price)
+2. Fetch current prices from Alpha Vantage (use alphavantage_GLOBAL_QUOTE tool for latest price)
 3. Calculate for each position:
    - Current value = shares × current_price
    - Gain/Loss = current_value - (shares × purchase_price)
@@ -183,8 +218,8 @@ CHART GENERATION WORKFLOW:
 
 When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
 
-1. FETCH DATA from Alpha Vantage:
-   - Use TIME_SERIES_DAILY for historical price data
+1. FETCH DATA from Alpha Vantage using MCP tools:
+   - Use alphavantage_TIME_SERIES_DAILY tool for historical price data
    - Extract dates and prices from the response
    - Process data into simple arrays
 
