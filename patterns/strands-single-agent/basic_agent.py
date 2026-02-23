@@ -3,7 +3,10 @@ import os
 import traceback
 
 import boto3
-from bedrock_agentcore.memory.integrations.strands.config import AgentCoreMemoryConfig
+from bedrock_agentcore.memory.integrations.strands.config import (
+    AgentCoreMemoryConfig,
+    RetrievalConfig,
+)
 from bedrock_agentcore.memory.integrations.strands.session_manager import (
     AgentCoreMemorySessionManager,
 )
@@ -14,44 +17,9 @@ from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 from strands_code_interpreter import StrandsCodeInterpreterTools
 
-from utils.auth import extract_user_id_from_context, get_gateway_access_token
-from utils.ssm import get_ssm_parameter
+from utils.auth import extract_user_id_from_context
 
 app = BedrockAgentCoreApp()
-
-
-def create_gateway_mcp_client(access_token: str) -> MCPClient:
-    """
-    Create MCP client for AgentCore Gateway with OAuth2 authentication.
-
-    MCP (Model Context Protocol) is how agents communicate with tool providers.
-    This creates a client that can talk to the AgentCore Gateway using the provided
-    access token for authentication. The Gateway then provides access to Lambda-based tools.
-    """
-    stack_name = os.environ.get("STACK_NAME")
-    if not stack_name:
-        raise ValueError("STACK_NAME environment variable is required")
-
-    # Validate stack name format to prevent injection
-    if not stack_name.replace("-", "").replace("_", "").isalnum():
-        raise ValueError("Invalid STACK_NAME format")
-
-    print(f"[AGENT] Creating Gateway MCP client for stack: {stack_name}")
-
-    # Fetch Gateway URL from SSM
-    gateway_url = get_ssm_parameter(f"/{stack_name}/gateway_url")
-    print(f"[AGENT] Gateway URL from SSM: {gateway_url}")
-
-    # Create MCP client with Bearer token authentication
-    gateway_client = MCPClient(
-        lambda: streamablehttp_client(
-            url=gateway_url, headers={"Authorization": f"Bearer {access_token}"}
-        ),
-        prefix="gateway",
-    )
-
-    print("[AGENT] Gateway MCP client created successfully")
-    return gateway_client
 
 
 def create_alpha_vantage_mcp_client() -> MCPClient:
@@ -89,43 +57,145 @@ def create_alpha_vantage_mcp_client() -> MCPClient:
     return alpha_vantage_client
 
 
-def create_basic_agent(user_id: str, session_id: str) -> Agent:
+def create_investment_advisor_agent(user_id: str, session_id: str) -> Agent:
     """
-    Create a basic agent with Gateway MCP tools, Alpha Vantage MCP tools, and memory integration.
+    Create an Investment Advisor agent with Alpha Vantage financial data, Code Interpreter,
+    and long-term memory for portfolio tracking.
 
-    This function sets up an agent that can access tools from two MCP servers:
-    1. AgentCore Gateway - Custom Lambda-based tools (text analysis, etc.)
-    2. Alpha Vantage MCP - 100+ financial data tools (stocks, indicators, fundamentals, etc.)
+    This function sets up a specialized investment advisor that can:
+    1. Access 100+ Alpha Vantage financial tools (stocks, indicators, fundamentals)
+    2. Execute Python code for calculations and chart generation
+    3. Remember user investments and preferences across sessions using long-term memory
     
-    The agent also has Code Interpreter capabilities and maintains conversation memory.
-    It handles authentication for both MCP servers and configures the agent with access
-    to all available tools. If either MCP connection fails, the error is raised.
+    The agent uses AgentCore Memory with three strategies:
+    - SemanticMemoryStrategy: Extracts investment facts (purchases, positions)
+    - UserPreferenceMemoryStrategy: Learns risk tolerance and investment preferences
+    - SummaryMemoryStrategy: Summarizes investment decisions and sessions
     
     Args:
-        user_id: Unique identifier for the user
+        user_id: Unique identifier for the user (used for memory namespacing)
         session_id: Unique identifier for the conversation session
         
     Returns:
-        Agent: Configured Strands agent with all tools and memory
+        Agent: Configured investment advisor agent with financial tools and memory
         
     Raises:
-        ValueError: If required environment variables are missing
-        Exception: If MCP client creation fails
+        ValueError: If required environment variables (MEMORY_ID, ALPHA_VANTAGE_API_KEY) are missing
+        Exception: If MCP client creation or memory configuration fails
     """
-    system_prompt = """You are a helpful financial assistant with access to comprehensive tools:
+    system_prompt = """You are an experienced Investment Advisor with access to comprehensive 
+financial market data, analysis tools, and long-term memory of user portfolios.
 
-1. Gateway Tools: Custom tools for text analysis and other utilities
-2. Alpha Vantage Tools: 100+ financial data tools including:
-   - Stock prices and quotes (TIME_SERIES_DAILY, GLOBAL_QUOTE, etc.)
-   - Technical indicators (RSI, MACD, Bollinger Bands, SMA, EMA, etc.)
-   - Fundamental data (COMPANY_OVERVIEW, EARNINGS, INCOME_STATEMENT, etc.)
-   - Options data, Forex, Crypto, Commodities
-   - Economic indicators and market news
-3. Code Interpreter: Execute Python code for analysis and visualization
+YOUR CAPABILITIES:
 
-When asked about stocks or financial data, use the Alpha Vantage tools.
-When asked about text analysis, use the Gateway tools.
-Always explain what tools you're using and why."""
+1. ALPHA VANTAGE FINANCIAL DATA (100+ tools):
+   - Real-time and historical stock prices (GLOBAL_QUOTE, TIME_SERIES_DAILY, etc.)
+   - Technical indicators (RSI, MACD, Bollinger Bands, Moving Averages, etc.)
+   - Fundamental data (COMPANY_OVERVIEW, EARNINGS, INCOME_STATEMENT, BALANCE_SHEET)
+   - Market news and sentiment analysis
+   - Options data, Forex, Crypto, Commodities, Economic indicators
+
+2. CODE INTERPRETER:
+   - Generate professional charts and visualizations (matplotlib, plotly)
+   - Perform statistical analysis and financial calculations
+   - Create comparative analyses and correlations
+   - Build custom financial models and projections
+
+3. LONG-TERM MEMORY:
+   - Your memory automatically learns and stores user investment preferences
+   - You remember past investment decisions and portfolio positions
+   - You recall user's risk tolerance, investment goals, and strategies
+   - Memory persists across all conversations with this user
+
+PORTFOLIO TRACKING WORKFLOW:
+
+When a user reports an investment:
+1. ALWAYS acknowledge with precise details:
+   "I've recorded your investment: [shares] shares of [SYMBOL] at $[price] per share 
+   on [date], total investment $[total]."
+2. Your memory will automatically extract and store this investment fact
+3. Be explicit about all details (symbol, shares, price, date) for accurate extraction
+
+When a user asks about portfolio performance:
+1. Recall their investments from your memory
+2. Fetch current prices from Alpha Vantage (use GLOBAL_QUOTE for latest price)
+3. Calculate for each position:
+   - Current value = shares × current_price
+   - Gain/Loss = current_value - (shares × purchase_price)
+   - Gain/Loss % = (gain_loss / invested_amount) × 100
+4. Create a visualization showing performance over time
+5. Provide detailed analysis with insights
+
+CHART GENERATION EXAMPLES:
+
+For price trends:
+```python
+import matplotlib.pyplot as plt
+import pandas as pd
+from datetime import datetime
+
+# Create line chart with volume
+fig, (ax1, ax2) = plt.subplots(2, 1, figsize=(12, 8), sharex=True)
+ax1.plot(dates, prices, linewidth=2, color='#2E86AB')
+ax1.set_ylabel('Price ($)', fontsize=12)
+ax1.grid(True, alpha=0.3)
+ax2.bar(dates, volumes, color='#A23B72', alpha=0.7)
+ax2.set_ylabel('Volume', fontsize=12)
+plt.tight_layout()
+```
+
+For portfolio performance:
+```python
+# Create portfolio performance chart
+fig, ax = plt.subplots(figsize=(12, 6))
+for symbol, data in portfolio.items():
+    ax.plot(data['dates'], data['returns'], label=symbol, linewidth=2)
+ax.axhline(y=0, color='black', linestyle='--', alpha=0.3)
+ax.set_xlabel('Date')
+ax.set_ylabel('Return (%)')
+ax.set_title('Portfolio Performance', fontsize=16, fontweight='bold')
+ax.legend()
+ax.grid(True, alpha=0.3)
+```
+
+YOUR INVESTMENT ADVISORY APPROACH:
+
+1. DATA-DRIVEN ANALYSIS:
+   - Always fetch current market data before providing recommendations
+   - Use both technical and fundamental analysis
+   - Consider historical trends and patterns
+
+2. RISK ASSESSMENT:
+   - Discuss risk factors for each investment
+   - Consider market conditions and volatility
+   - Align recommendations with user's risk tolerance (from memory)
+
+3. CLEAR COMMUNICATION:
+   - Explain technical indicators in accessible terms
+   - Provide context on industry trends and comparisons
+   - Use visualizations to support your analysis
+
+4. EDUCATIONAL APPROACH:
+   - Help users understand investment concepts
+   - Explain the reasoning behind your analysis
+   - Suggest areas for further research
+
+5. PROFESSIONAL DISCLAIMERS:
+   - Always remind users that you provide information for educational purposes
+   - Investment decisions should consider individual circumstances
+   - Recommend consulting with qualified financial advisors for personalized advice
+
+IMPORTANT REMINDERS:
+- Be explicit when recording investments so memory extraction is accurate
+- Always fetch current prices before calculating performance
+- Create charts to visualize trends and performance
+- Remember user preferences and reference them in your advice
+- Provide balanced insights considering both opportunities and risks
+
+DISCLAIMER: I provide investment information and analysis for educational purposes only. 
+This is not personalized financial advice. Investment decisions should be made in 
+consultation with qualified financial advisors, considering your individual circumstances, 
+risk tolerance, and financial goals. Past performance does not guarantee future results."""
 
     bedrock_model = BedrockModel(
         model_id="us.anthropic.claude-sonnet-4-5-20250929-v1:0", temperature=0.1
@@ -135,9 +205,24 @@ Always explain what tools you're using and why."""
     if not memory_id:
         raise ValueError("MEMORY_ID environment variable is required")
 
-    # Configure AgentCore Memory
+    # Configure AgentCore Memory with long-term strategies for investment tracking
+    # Retrieves from investment and preference namespaces to recall portfolio and user preferences
     agentcore_memory_config = AgentCoreMemoryConfig(
-        memory_id=memory_id, session_id=session_id, actor_id=user_id
+        memory_id=memory_id,
+        session_id=session_id,
+        actor_id=user_id,
+        retrieval_config={
+            # Retrieve investment facts with high top_k to get all investments
+            "/investments/{actorId}": RetrievalConfig(
+                top_k=50,  # Retrieve up to 50 investment records
+                relevance_score=0.3,  # Lower threshold to capture all investments
+            ),
+            # Retrieve user investment preferences
+            "/preferences/{actorId}": RetrievalConfig(
+                top_k=10,  # Top 10 preferences
+                relevance_score=0.5,  # Medium threshold for relevant preferences
+            ),
+        },
     )
 
     session_manager = AgentCoreMemorySessionManager(
@@ -151,33 +236,20 @@ Always explain what tools you're using and why."""
     code_tools = StrandsCodeInterpreterTools(region)
 
     try:
-        print("[AGENT] Starting agent creation with multiple MCP servers...")
+        print("[AGENT] Starting Investment Advisor agent creation...")
 
-        # Get OAuth2 access token and create Gateway MCP client
-        print("[AGENT] Step 1: Getting OAuth2 access token for Gateway...")
-        access_token = get_gateway_access_token()
-        print(f"[AGENT] Got access token: {access_token[:20]}...")
-
-        # Create Gateway MCP client with authentication
-        print("[AGENT] Step 2: Creating Gateway MCP client...")
-        gateway_client = create_gateway_mcp_client(access_token)
-        print("[AGENT] Gateway MCP client created successfully")
-
-        # Create Alpha Vantage MCP client
-        print("[AGENT] Step 3: Creating Alpha Vantage MCP client...")
+        # Create Alpha Vantage MCP client for financial data
+        print("[AGENT] Creating Alpha Vantage MCP client...")
         alpha_vantage_client = create_alpha_vantage_mcp_client()
         print("[AGENT] Alpha Vantage MCP client created successfully")
 
-        print(
-            "[AGENT] Step 4: Creating Agent with Gateway tools, Alpha Vantage tools, and Code Interpreter..."
-        )
+        print("[AGENT] Creating Investment Advisor agent with Alpha Vantage tools and Code Interpreter...")
         agent = Agent(
-            name="FinancialAgent",
+            name="InvestmentAdvisor",
             system_prompt=system_prompt,
             tools=[
-                gateway_client,           # Custom Lambda tools via Gateway
-                alpha_vantage_client,     # Alpha Vantage financial tools
-                code_tools.execute_python_securely  # Code Interpreter
+                alpha_vantage_client,  # Alpha Vantage financial tools
+                code_tools.execute_python_securely,  # Code Interpreter for charts and calculations
             ],
             model=bedrock_model,
             session_manager=session_manager,
@@ -186,33 +258,36 @@ Always explain what tools you're using and why."""
                 "session.id": session_id,
             },
         )
-        print(
-            "[AGENT] Agent created successfully with Gateway tools, Alpha Vantage tools, and Code Interpreter"
-        )
+        print("[AGENT] Investment Advisor agent created successfully with memory and financial tools")
         return agent
 
     except Exception as e:
-        print(f"[AGENT ERROR] Error creating MCP clients: {e}")
+        print(f"[AGENT ERROR] Error creating Investment Advisor agent: {e}")
         print(f"[AGENT ERROR] Exception type: {type(e).__name__}")
         print("[AGENT ERROR] Traceback:")
         traceback.print_exc()
-        print(
-            "[AGENT] MCP connection failed - raising exception"
-        )
         raise
 
 
 @app.entrypoint
 async def agent_stream(payload, context: RequestContext):
     """
-    Main entrypoint for the agent using streaming with Gateway integration.
+    Main entrypoint for the Investment Advisor agent using streaming.
 
     This is the function that AgentCore Runtime calls when the agent receives a request.
     It extracts the user's query from the payload, securely obtains the user ID from
-    the validated JWT token in the request context, creates an agent with Gateway tools
-    and memory, and streams the response back. This function handles the complete
-    request lifecycle with token-level streaming. The user ID is extracted from the 
-    JWT token (via RequestContext).
+    the validated JWT token in the request context, creates an Investment Advisor agent
+    with Alpha Vantage financial tools, Code Interpreter, and long-term memory, then
+    streams the response back. This function handles the complete request lifecycle
+    with token-level streaming. The user ID is extracted from the JWT token (via
+    RequestContext) for secure memory namespacing.
+    
+    Args:
+        payload: Request payload containing prompt and runtimeSessionId
+        context: RequestContext with validated JWT token for user authentication
+        
+    Yields:
+        dict: Streaming events from the agent (text chunks, tool calls, etc.)
     """
     user_query = payload.get("prompt")
     session_id = payload.get("runtimeSessionId")
@@ -230,11 +305,11 @@ async def agent_stream(payload, context: RequestContext):
         user_id = extract_user_id_from_context(context)
 
         print(
-            f"[STREAM] Starting streaming invocation for user: {user_id}, session: {session_id}"
+            f"[STREAM] Starting Investment Advisor streaming for user: {user_id}, session: {session_id}"
         )
         print(f"[STREAM] Query: {user_query}")
 
-        agent = create_basic_agent(user_id, session_id)
+        agent = create_investment_advisor_agent(user_id, session_id)
 
         # Use the agent's stream_async method for true token-level streaming
         async for event in agent.stream_async(user_query):

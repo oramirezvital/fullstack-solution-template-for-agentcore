@@ -62,20 +62,18 @@ export class BackendStack extends cdk.NestedStack {
     )
 
     // Create Machine-to-Machine authentication components
-    this.createMachineAuthentication(props.config)
+    // NOTE: Gateway infrastructure removed - Investment Advisor uses Alpha Vantage MCP only
+    // this.createMachineAuthentication(props.config)
 
     // DEPLOYMENT ORDER EXPLANATION:
     // 1. Cognito User Pool & Client (created in separate CognitoStack)
-    // 2. Machine Client & Resource Server (created above for M2M auth)
-    // 3. AgentCore Gateway (created next - uses machine client for auth)
-    // 4. AgentCore Runtime (created last - independent of gateway)
+    // 2. AgentCore Runtime (uses Alpha Vantage MCP for financial data)
     //
-    // This order ensures that authentication components are available before
-    // the gateway that depends on them, while keeping the runtime separate
-    // since it doesn't directly depend on the gateway.
+    // Gateway infrastructure has been removed as the Investment Advisor agent
+    // connects directly to Alpha Vantage MCP server for financial data.
 
-    // Create AgentCore Gateway (before Runtime)
-    this.createAgentCoreGateway(props.config)
+    // Create AgentCore Gateway (REMOVED - using Alpha Vantage MCP instead)
+    // this.createAgentCoreGateway(props.config)
 
     // Create AgentCore Runtime resources
     this.createAgentCoreRuntime(props.config)
@@ -230,15 +228,38 @@ export class BackendStack extends cdk.NestedStack {
     // Create AgentCore execution role
     const agentRole = new AgentCoreRole(this, "AgentCoreRole")
 
-    // Create memory resource with short-term memory (conversation history) as default
-    // To enable long-term strategies (summaries, preferences, facts), see docs/MEMORY_INTEGRATION.md
+    // Create memory resource with long-term memory strategies for investment tracking
+    // Semantic memory extracts investment facts, user preferences learns risk tolerance,
+    // and summary memory captures investment decisions across sessions
     const memory = new cdk.CfnResource(this, "AgentMemory", {
       type: "AWS::BedrockAgentCore::Memory",
       properties: {
         Name: cdk.Names.uniqueResourceName(this, { maxLength: 48 }),
-        EventExpiryDuration: 30,
-        Description: `Short-term memory for ${config.stack_name_base} agent`,
-        MemoryStrategies: [], // Empty array = short-term only (conversation history)
+        EventExpiryDuration: 90, // 90 days for investment tracking history
+        Description: `Investment portfolio memory for ${config.stack_name_base} agent`,
+        MemoryStrategies: [
+          {
+            // Extract and store investment facts (purchases, positions, transactions)
+            SemanticMemoryStrategy: {
+              Name: "InvestmentFactExtractor",
+              Namespaces: ["/investments/{actorId}"],
+            },
+          },
+          {
+            // Learn user investment preferences (risk tolerance, sectors, strategies)
+            UserPreferenceMemoryStrategy: {
+              Name: "InvestorPreferenceLearner",
+              Namespaces: ["/preferences/{actorId}"],
+            },
+          },
+          {
+            // Summarize investment sessions and decisions
+            SummaryMemoryStrategy: {
+              Name: "InvestmentSessionSummarizer",
+              Namespaces: ["/summaries/{actorId}/{sessionId}"],
+            },
+          },
+        ],
         MemoryExecutionRoleArn: agentRole.roleArn,
         Tags: {
           Name: `${config.stack_name_base}_Memory`,
@@ -267,18 +288,6 @@ export class BackendStack extends cdk.NestedStack {
       })
     )
 
-    // Add SSM permissions for Gateway URL lookup
-    agentRole.addToPolicy(
-      new iam.PolicyStatement({
-        sid: "SSMParameterAccess",
-        effect: iam.Effect.ALLOW,
-        actions: ["ssm:GetParameter", "ssm:GetParameters"],
-        resources: [
-          `arn:aws:ssm:${this.region}:${this.account}:parameter/${config.stack_name_base}/*`,
-        ],
-      })
-    )
-
     // Add Code Interpreter permissions
     agentRole.addToPolicy(
       new iam.PolicyStatement({
@@ -298,7 +307,6 @@ export class BackendStack extends cdk.NestedStack {
       AWS_REGION: stack.region,
       AWS_DEFAULT_REGION: stack.region,
       MEMORY_ID: memoryId,
-      STACK_NAME: config.stack_name_base, // Required for agent to find SSM parameters
       ALPHA_VANTAGE_API_KEY: "6I7SGM9D7G40YB1I", // Alpha Vantage API key for MCP server
     }
 
@@ -374,18 +382,8 @@ export class BackendStack extends cdk.NestedStack {
       description: "Cognito User Pool Client ID",
     })
 
-    new ssm.StringParameter(this, "MachineClientIdParam", {
-      parameterName: `/${config.stack_name_base}/machine_client_id`,
-      stringValue: this.machineClient.userPoolClientId,
-      description: "Machine Client ID for M2M authentication",
-    })
-
-    new secretsmanager.Secret(this, "MachineClientSecret", {
-      secretName: `/${config.stack_name_base}/machine_client_secret`,
-      secretStringValue: cdk.SecretValue.unsafePlainText(this.machineClient.userPoolClientSecret.unsafeUnwrap()),
-      description: "Machine Client Secret for M2M authentication",
-    })
-
+    // Machine client parameters removed - no longer needed without Gateway
+    
     // Use the correct Cognito domain format from the passed domain
     new ssm.StringParameter(this, "CognitoDomainParam", {
       parameterName: `/${config.stack_name_base}/cognito_provider`,

@@ -267,10 +267,10 @@ export default function ChatInterface() {
 
   // Suggested prompts for quick start
   const suggestedPrompts = [
-    "What can you help me with?",
-    "Tell me about your capabilities",
-    "How does this system work?",
-    "Show me an example"
+    "Analyze Apple stock performance",
+    "Show me a chart of Tesla's price trend",
+    "What are the best tech stocks to watch?",
+    "Explain RSI indicator for beginners"
   ]
 
   const handlePromptClick = (prompt: string) => {
@@ -305,10 +305,10 @@ export default function ChatInterface() {
               </div>
             </div>
             <h2 className="text-4xl font-bold gradient-text mb-3">
-              Welcome to FAST Chat
+              Investment Advisor
             </h2>
             <p className="text-gray-600 dark:text-gray-400 text-lg mb-8">
-              Your intelligent assistant powered by AWS Bedrock AgentCore
+              Your AI-powered investment advisor with real-time market data and portfolio tracking
             </p>
             
             {/* Suggested prompts */}
