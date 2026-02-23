@@ -57,6 +57,19 @@ const components: Record<string, any> = {
   pre({ children }: { children?: React.ReactNode }) {
     return <>{children}</>
   },
+  img({ src, alt }: { src?: string; alt?: string }) {
+    // Handle base64 images from Code Interpreter
+    return (
+      <div className="my-3 rounded-lg overflow-hidden border border-gray-200 bg-white p-2">
+        <img 
+          src={src} 
+          alt={alt || "Chart"} 
+          className="w-full h-auto rounded"
+          loading="lazy"
+        />
+      </div>
+    )
+  },
 }
 
 export function MarkdownRenderer({ content }: { content: string }) {
