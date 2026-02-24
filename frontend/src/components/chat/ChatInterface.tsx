@@ -193,16 +193,32 @@ export default function ChatInterface() {
       )
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error"
-      setError(`Failed to get response: ${errorMessage}`)
+      
+      // Provide user-friendly error messages based on error type
+      let userMessage = "I apologize, but I encountered an error processing your request."
+      
+      if (errorMessage.includes("timeout") || errorMessage.includes("Network error")) {
+        userMessage = "The connection timed out or was interrupted. Please try sending your message again."
+        setError(`Connection issue: ${errorMessage}`)
+      } else if (errorMessage.includes("Authentication")) {
+        userMessage = "Your session has expired. Please refresh the page and log in again."
+        setError(`Authentication error: ${errorMessage}`)
+      } else if (errorMessage.includes("decoding") || errorMessage.includes("corrupted")) {
+        userMessage = "There was an issue with the data stream. Please try again."
+        setError(`Stream error: ${errorMessage}`)
+      } else {
+        userMessage = "I encountered an unexpected error. Please try again or start a new conversation."
+        setError(`Error: ${errorMessage}`)
+      }
+      
       console.error("Error invoking AgentCore:", err)
 
-      // Update the assistant message with error
+      // Update the assistant message with user-friendly error
       setMessages((prev) => {
         const updated = [...prev]
         updated[updated.length - 1] = {
           ...updated[updated.length - 1],
-          content:
-            "I apologize, but I encountered an error processing your request. Please try again.",
+          content: userMessage,
         }
         return updated
       })

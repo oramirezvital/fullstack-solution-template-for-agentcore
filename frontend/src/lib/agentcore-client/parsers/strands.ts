@@ -6,6 +6,11 @@ import type { ChunkParser } from "../types";
 /**
  * Parses SSE chunks from Strands agents.
  * Emits typed StreamEvents for text, tool use, messages, and lifecycle.
+ * 
+ * Handles malformed JSON gracefully and provides detailed error logging.
+ * 
+ * @param line - Raw SSE line from the stream
+ * @param callback - Function to handle parsed events
  */
 export const parseStrandsChunk: ChunkParser = (line, callback) => {
   if (!line.startsWith("data: ")) return;
@@ -66,7 +71,13 @@ export const parseStrandsChunk: ChunkParser = (line, callback) => {
       callback({ type: "lifecycle", event });
       return;
     }
-  } catch {
-    console.debug("Failed to parse strands event:", data);
+  } catch (error) {
+    // Provide detailed error logging for debugging
+    const errorMessage = error instanceof Error ? error.message : "Unknown error";
+    console.warn("[Strands Parser] Failed to parse event:", {
+      error: errorMessage,
+      data: data.substring(0, 200), // Log first 200 chars to avoid console spam
+      dataLength: data.length
+    });
   }
 };
