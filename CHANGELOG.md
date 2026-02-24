@@ -13,6 +13,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Investment Advisor agent with long-term memory for portfolio tracking
 - JSON-based chart generation using Recharts (replaced Gateway chart tool)
 - AWS Secrets Manager integration for secure API key storage
+- Investment tracking system with DynamoDB backend for recording and analyzing trades
+  - Record investment transactions with date, symbol, units, and price
+  - Track forecasted vs. actual performance over time
+  - Portfolio performance summary with gains/losses
+  - Compare agent recommendations against real market outcomes
+- Four investment tracking tools integrated into agent:
+  - `record_investment`: Record new trades based on recommendations
+  - `get_portfolio_performance`: View portfolio summary and performance
+  - `update_investment_price`: Update current prices for positions
+  - `compare_forecast_actual`: Analyze forecast accuracy
 
 ### Changed
 

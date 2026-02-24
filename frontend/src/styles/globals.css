@@ -8,6 +8,19 @@
   --color-foreground: var(--foreground);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
+  
+  /* TradingView colors */
+  --color-tv-background-primary: var(--tv-background-primary);
+  --color-tv-background-secondary: var(--tv-background-secondary);
+  --color-tv-background-tertiary: var(--tv-background-tertiary);
+  --color-tv-accent-blue: var(--tv-accent-blue);
+  --color-tv-success-green: var(--tv-success-green);
+  --color-tv-danger-red: var(--tv-danger-red);
+  --color-tv-text-primary: var(--tv-text-primary);
+  --color-tv-text-secondary: var(--tv-text-secondary);
+  --color-tv-border: var(--tv-border);
+  
+  /* Legacy brand colors */
   --color-brand-dark: hsl(197, 37%, 24%);
   --color-brand-teal: hsl(173, 58%, 39%);
   --color-brand-lime: hsl(43, 74%, 66%);
@@ -49,43 +62,56 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --radius: 0.5rem;
+  
+  /* TradingView-inspired color palette */
+  --tv-background-primary: #131722;
+  --tv-background-secondary: #1E222D;
+  --tv-background-tertiary: #2A2E39;
+  --tv-accent-blue: #2962FF;
+  --tv-success-green: #089981;
+  --tv-danger-red: #F23645;
+  --tv-text-primary: #D1D4DC;
+  --tv-text-secondary: #787B86;
+  --tv-border: #2A2E39;
+  
+  /* Legacy variables for compatibility */
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
   --brand-dark: 197 37% 24%;
   --brand-teal: 173 58% 39%;
   --brand-lime: 43 74% 66%;
   --brand-yellow: 27 87% 67%;
   --brand-orange: 12 76% 61%;
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.646 0.222 41.116);
-  --chart-2: oklch(0.6 0.118 184.704);
-  --chart-3: oklch(0.398 0.07 227.392);
-  --chart-4: oklch(0.828 0.189 84.429);
-  --chart-5: oklch(0.769 0.188 70.08);
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
+  --card: oklch(0.205 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.205 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.922 0 0);
+  --primary-foreground: oklch(0.205 0 0);
+  --secondary: oklch(0.269 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.269 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.269 0 0);
+  --accent-foreground: oklch(0.985 0 0);
+  --destructive: oklch(0.704 0.191 22.216);
+  --border: oklch(1 0 0 / 10%);
+  --input: oklch(1 0 0 / 15%);
+  --ring: oklch(0.556 0 0);
+  --chart-1: oklch(0.488 0.243 264.376);
+  --chart-2: oklch(0.696 0.17 162.48);
+  --chart-3: oklch(0.769 0.188 70.08);
+  --chart-4: oklch(0.627 0.265 303.9);
+  --chart-5: oklch(0.645 0.246 16.439);
+  --sidebar: oklch(0.205 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.488 0.243 264.376);
   --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar-accent: oklch(0.269 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --sidebar-border: oklch(1 0 0 / 10%);
+  --sidebar-ring: oklch(0.556 0 0);
   
   /* Font variables for Geist fonts */
   --font-geist-sans: 'Geist Sans', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
@@ -132,41 +158,35 @@
   }
   body {
     @apply bg-background text-foreground;
-    background: linear-gradient(135deg, oklch(0.99 0.01 200) 0%, oklch(0.97 0.02 180) 100%);
+    background: var(--tv-background-primary);
+    color: var(--tv-text-primary);
   }
   .dark body {
-    background: linear-gradient(135deg, oklch(0.15 0.01 240) 0%, oklch(0.12 0.02 220) 100%);
+    background: var(--tv-background-primary);
+    color: var(--tv-text-primary);
   }
   a {
-    @apply text-brand-yellow hover:text-brand-yellow/80 underline;
+    @apply text-tv-accent-blue hover:text-tv-accent-blue/80 underline;
   }
 }
 
-/* Custom scrollbar styling */
+/* Custom scrollbar styling - TradingView style */
 ::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
 }
 
 ::-webkit-scrollbar-track {
-  background: transparent;
+  background: var(--tv-background-secondary);
 }
 
 ::-webkit-scrollbar-thumb {
-  background: oklch(0.7 0 0 / 0.3);
-  border-radius: 4px;
+  background: var(--tv-background-tertiary);
+  border-radius: 5px;
 }
 
 ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.6 0 0 / 0.5);
-}
-
-.dark ::-webkit-scrollbar-thumb {
-  background: oklch(0.4 0 0 / 0.3);
-}
-
-.dark ::-webkit-scrollbar-thumb:hover {
-  background: oklch(0.5 0 0 / 0.5);
+  background: #3A3E49;
 }
 
 /* Glass morphism effect */

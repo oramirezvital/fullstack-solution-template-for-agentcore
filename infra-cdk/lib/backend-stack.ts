@@ -78,8 +78,11 @@ export class BackendStack extends cdk.NestedStack {
     // Create AgentCore Gateway with chart generation tool
     this.createAgentCoreGateway(props.config)
 
+    // Create Investment Tracking DynamoDB table for storing investment transactions
+    const investmentTable = this.createInvestmentTrackingTable(props.config)
+
     // Create AgentCore Runtime resources
-    this.createAgentCoreRuntime(props.config)
+    this.createAgentCoreRuntime(props.config, investmentTable)
 
     // Store runtime ARN in SSM for frontend stack
     this.createRuntimeSSMParameters(props.config)
@@ -95,7 +98,7 @@ export class BackendStack extends cdk.NestedStack {
     this.createFeedbackApi(props.config, props.frontendUrl, feedbackTable)
   }
 
-  private createAgentCoreRuntime(config: AppConfig): void {
+  private createAgentCoreRuntime(config: AppConfig, investmentTable: dynamodb.Table): void {
     const pattern = config.backend?.pattern || "strands-single-agent"
 
     // Parameters
@@ -349,7 +352,11 @@ export class BackendStack extends cdk.NestedStack {
       // ALPHA_VANTAGE_API_KEY removed - now fetched from Secrets Manager at runtime
       STACK_NAME: config.stack_name_base, // Stack name for Gateway authentication and secret retrieval
       GATEWAY_URL: this.gatewayUrl, // Gateway URL for chart generation
+      INVESTMENT_TABLE_NAME: investmentTable.tableName, // DynamoDB table for investment tracking
     }
+
+    // Grant agent role access to investment tracking table
+    investmentTable.grantReadWriteData(agentRole)
 
     // Create the runtime using L2 construct
     // requestHeaderConfiguration allows the agent to read the Authorization header
@@ -484,7 +491,74 @@ export class BackendStack extends cdk.NestedStack {
     return feedbackTable
   }
 
+  /**
+   * Creates a DynamoDB table for tracking investment transactions.
+   * 
+   * This table stores investment transactions made based on agent recommendations,
+   * including transaction details, forecast predictions, and performance tracking.
+   * The data enables comparison between forecasted and actual returns, providing
+   * accountability for agent recommendations and insights for users.
+   * 
+   * Table Schema:
+   * - Partition Key: user_id (STRING) - Cognito user identifier
+   * - Sort Key: transaction_id (STRING) - Format: {timestamp}#{symbol}
+   * 
+   * Global Secondary Indexes:
+   * - symbol-date-index: Query all transactions for a specific stock
+   * - user-status-index: Query active/closed positions by user
+   * 
+   * @param config - Application configuration containing stack name
+   * @returns DynamoDB Table construct for investment transactions
+   */
+  private createInvestmentTrackingTable(config: AppConfig): dynamodb.Table {
+    const table = new dynamodb.Table(this, "InvestmentTransactions", {
+      tableName: `${config.stack_name_base}-investment-transactions`,
+      partitionKey: {
+        name: "user_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "transaction_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      removalPolicy: cdk.RemovalPolicy.RETAIN, // Keep investment data on stack deletion
+      pointInTimeRecoverySpecification: {
+        pointInTimeRecoveryEnabled: true,
+      },
+      encryption: dynamodb.TableEncryption.AWS_MANAGED,
+    })
 
+    // GSI-1: Query by symbol to see all transactions for a specific stock
+    table.addGlobalSecondaryIndex({
+      indexName: "symbol-date-index",
+      partitionKey: {
+        name: "symbol",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "transaction_date",
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    })
+
+    // GSI-2: Query by status to get active/closed positions
+    table.addGlobalSecondaryIndex({
+      indexName: "user-status-index",
+      partitionKey: {
+        name: "user_id",
+        type: dynamodb.AttributeType.STRING,
+      },
+      sortKey: {
+        name: "status",
+        type: dynamodb.AttributeType.STRING,
+      },
+      projectionType: dynamodb.ProjectionType.ALL,
+    })
+
+    return table
+  }
 
   /**
    * Creates an API Gateway with Lambda integration for the feedback endpoint.

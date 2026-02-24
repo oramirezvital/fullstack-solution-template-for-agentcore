@@ -267,10 +267,10 @@ export default function ChatInterface() {
 
   // Suggested prompts for quick start
   const suggestedPrompts = [
-    "Analyze Apple stock performance",
-    "Show me a chart of Tesla's price trend",
-    "What are the best tech stocks to watch?",
-    "Explain RSI indicator for beginners"
+    "Analyze AAPL stock performance and trends",
+    "Show me a technical chart for TSLA",
+    "What are the top performing tech stocks today?",
+    "Compare MSFT vs GOOGL fundamentals"
   ]
 
   const handlePromptClick = (prompt: string) => {
@@ -300,26 +300,28 @@ export default function ChatInterface() {
           {/* Centered welcome message */}
           <div className="text-center mb-8 px-4 animate-fade-in-up">
             <div className="mb-4">
-              <div className="w-20 h-20 mx-auto rounded-3xl gradient-bg-brand flex items-center justify-center shadow-2xl mb-6">
-                <span className="text-white font-bold text-4xl">F</span>
+              <div className="w-20 h-20 mx-auto rounded-2xl bg-tv-accent-blue flex items-center justify-center shadow-2xl mb-6">
+                <svg className="w-12 h-12 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                </svg>
               </div>
             </div>
-            <h2 className="text-4xl font-bold gradient-text mb-3">
-              Investment Advisor
+            <h2 className="text-4xl font-bold text-tv-text-primary mb-3">
+              Stock Market Data
             </h2>
-            <p className="text-gray-600 dark:text-gray-400 text-lg mb-8">
-              Your AI-powered investment advisor with real-time market data and portfolio tracking
+            <p className="text-tv-text-secondary text-lg mb-8">
+              Real-time market analysis powered by AI • Track investments • Compare forecasts
             </p>
             
             {/* Suggested prompts */}
             <div className="max-w-2xl mx-auto mb-8">
-              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">Try asking:</p>
+              <p className="text-sm text-tv-text-secondary mb-4">Quick start:</p>
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {suggestedPrompts.map((prompt, index) => (
                   <button
                     key={index}
                     onClick={() => handlePromptClick(prompt)}
-                    className="prompt-button px-4 py-3 rounded-xl text-left text-sm text-gray-700 dark:text-gray-300"
+                    className="px-4 py-3 rounded-lg text-left text-sm bg-tv-background-tertiary border border-tv-border text-tv-text-primary hover:border-tv-accent-blue hover:bg-tv-background-secondary transition-all duration-200"
                     disabled={isLoading}
                   >
                     {prompt}

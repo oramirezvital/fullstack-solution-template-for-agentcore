@@ -14,12 +14,13 @@ from bedrock_agentcore.memory.integrations.strands.session_manager import (
 from bedrock_agentcore.runtime import BedrockAgentCoreApp, RequestContext
 from mcp import stdio_client, StdioServerParameters
 from mcp.client.streamable_http import streamablehttp_client
-from strands import Agent
+from strands import Agent, tool
 from strands.models import BedrockModel
 from strands.tools.mcp import MCPClient
 from strands_code_interpreter import StrandsCodeInterpreterTools
 
 from utils.auth import extract_user_id_from_context
+from utils.investment_tracker import InvestmentTracker
 
 # Configure logging
 logging.basicConfig(
@@ -156,6 +157,134 @@ def create_alpha_vantage_mcp_client() -> MCPClient:
 #     return gateway_client
 
 
+class InvestmentTrackingTools:
+    """Strands wrapper for investment tracking tools."""
+    
+    def __init__(self, table_name: str, region: str):
+        """
+        Initialize investment tracking tools.
+        
+        Args:
+            table_name: DynamoDB table name for investment transactions
+            region: AWS region for DynamoDB client
+        """
+        self.tracker = InvestmentTracker(table_name=table_name, region=region)
+    
+    @tool
+    def record_investment(
+        self,
+        user_id: str,
+        symbol: str,
+        company_name: str,
+        units: float,
+        price_per_unit: float,
+        recommendation_reason: str,
+        forecast_target_price: float = None,
+        forecast_timeframe_days: int = None,
+    ) -> str:
+        """
+        Record a new investment transaction based on recommendation.
+        
+        Use this tool when a user confirms they want to invest based on your recommendation.
+        This creates a permanent record that can be used later to compare your forecast
+        against actual performance.
+        
+        Args:
+            user_id: User identifier
+            symbol: Stock ticker symbol (e.g., 'AAPL', 'TSLA')
+            company_name: Company name (e.g., 'Apple Inc.')
+            units: Number of shares purchased
+            price_per_unit: Purchase price per share
+            recommendation_reason: Why you recommended this investment
+            forecast_target_price: Your predicted target price (optional)
+            forecast_timeframe_days: Forecast timeframe in days (optional)
+            
+        Returns:
+            JSON string with transaction details
+        """
+        result = self.tracker.record_investment(
+            user_id=user_id,
+            symbol=symbol,
+            company_name=company_name,
+            units=units,
+            price_per_unit=price_per_unit,
+            recommendation_reason=recommendation_reason,
+            forecast_target_price=forecast_target_price,
+            forecast_timeframe_days=forecast_timeframe_days,
+        )
+        return json.dumps(result, default=str)
+    
+    @tool
+    def get_portfolio_performance(self, user_id: str) -> str:
+        """
+        Get performance summary for all active investments.
+        
+        Use this tool when a user asks about their portfolio performance or wants
+        to see how their investments are doing. This returns current values and
+        gains/losses for all active positions.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            JSON string with performance metrics including total invested,
+            current value, gains/losses, and individual position details
+        """
+        result = self.tracker.get_performance_summary(user_id=user_id)
+        return json.dumps(result, default=str)
+    
+    @tool
+    def update_investment_price(
+        self,
+        user_id: str,
+        transaction_id: str,
+        current_price: float
+    ) -> str:
+        """
+        Update the current price for an investment position.
+        
+        Use this tool to update the current market price for a specific investment.
+        This recalculates gains/losses based on the new price.
+        
+        Args:
+            user_id: User identifier
+            transaction_id: Transaction ID to update
+            current_price: Current market price
+            
+        Returns:
+            JSON string with updated position details
+        """
+        result = self.tracker.update_position_price(
+            user_id=user_id,
+            transaction_id=transaction_id,
+            current_price=current_price
+        )
+        return json.dumps(result, default=str)
+    
+    @tool
+    def compare_forecast_actual(self, user_id: str, transaction_id: str) -> str:
+        """
+        Compare forecasted vs. actual performance for an investment.
+        
+        Use this tool to analyze how accurate your forecast was for a specific
+        investment. This shows the predicted vs. actual returns and calculates
+        forecast accuracy.
+        
+        Args:
+            user_id: User identifier
+            transaction_id: Transaction ID to analyze
+            
+        Returns:
+            JSON string with forecast vs. actual comparison including
+            accuracy percentage and performance difference
+        """
+        result = self.tracker.compare_forecast_vs_actual(
+            user_id=user_id,
+            transaction_id=transaction_id
+        )
+        return json.dumps(result, default=str)
+
+
 def create_investment_advisor_agent(user_id: str, session_id: str) -> Agent:
     """
     Create an Investment Advisor agent with Alpha Vantage financial data, Code Interpreter,
@@ -225,6 +354,20 @@ YOUR CAPABILITIES:
    - You recall user's risk tolerance, investment goals, and strategies
    - Memory persists across all conversations with this user
 
+5. INVESTMENT TRACKING & PERFORMANCE ANALYSIS:
+   - Record investments made based on your recommendations
+   - Track transaction details (date, symbol, units, price)
+   - Store forecast predictions (target price, timeframe, expected return)
+   - Compare forecasted vs. actual performance
+   - Provide accountability for recommendations
+   - Update prices and calculate gains/losses
+   
+   **Available Tools:**
+   - record_investment: Store new investment transactions with forecasts
+   - get_portfolio_performance: Retrieve current portfolio status
+   - update_investment_price: Update current prices for positions
+   - compare_forecast_actual: Analyze forecast accuracy
+
 PORTFOLIO TRACKING WORKFLOW:
 
 When a user reports an investment:
@@ -235,14 +378,55 @@ When a user reports an investment:
 3. Be explicit about all details (symbol, shares, price, date) for accurate extraction
 
 When a user asks about portfolio performance:
-1. Recall their investments from your memory
-2. Fetch current prices from Alpha Vantage (use alphavantage_GLOBAL_QUOTE tool for latest price)
-3. Calculate for each position:
-   - Current value = shares × current_price
-   - Gain/Loss = current_value - (shares × purchase_price)
-   - Gain/Loss % = (gain_loss / invested_amount) × 100
-4. Create a visualization showing performance over time
-5. Provide detailed analysis with insights
+1. Use get_portfolio_performance tool to fetch tracked investments
+2. For each position, fetch current prices from Alpha Vantage (alphavantage_GLOBAL_QUOTE)
+3. Update prices using update_investment_price tool
+4. Display comprehensive performance summary:
+   - Total invested vs. current value
+   - Overall gain/loss percentage
+   - Individual position performance
+   - Positions that hit forecast targets
+5. Create visualizations showing performance over time
+6. Provide insights and recommendations
+
+INVESTMENT TRACKING WORKFLOW:
+
+When making an investment recommendation:
+1. Provide clear recommendation with detailed rationale
+2. Include specific forecast:
+   - Target price
+   - Timeframe (days)
+   - Expected return percentage
+3. If user decides to invest, use record_investment tool:
+   - Include all transaction details
+   - Store your forecast for future comparison
+   - Confirm recording with transaction ID
+
+Example:
+"I recommend buying 10 shares of AAPL at $185.50. Based on strong Q1 earnings,
+I forecast a target price of $210 within 90 days (13.2% expected return).
+
+Would you like me to record this investment for tracking?"
+
+If user confirms:
+record_investment(
+    user_id="{user_id}",
+    symbol="AAPL",
+    company_name="Apple Inc.",
+    units=10,
+    price_per_unit=185.50,
+    recommendation_reason="Strong Q1 earnings, positive analyst sentiment",
+    forecast_target_price=210.00,
+    forecast_timeframe_days=90
+)
+
+When analyzing recommendation accuracy:
+1. Use compare_forecast_actual tool for specific investments
+2. Show forecast vs. actual performance
+3. Calculate forecast accuracy percentage
+4. Explain factors that caused differences
+5. Learn from outcomes to improve future recommendations
+6. Be transparent about both successes and misses
 
 CHART GENERATION WORKFLOW:
 
@@ -400,22 +584,36 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
     session = boto3.Session(region_name=region)
     code_tools = StrandsCodeInterpreterTools(region)
 
+    # Initialize investment tracking tools
+    table_name = os.environ.get("INVESTMENT_TABLE_NAME")
+    if not table_name:
+        raise ValueError(
+            "INVESTMENT_TABLE_NAME environment variable is required. "
+            "This should be set by the CDK deployment in backend-stack.ts"
+        )
+    
+    tracking_tools = InvestmentTrackingTools(table_name=table_name, region=region)
+
     try:
-        print("[AGENT] Starting Investment Advisor agent creation...")
+        logger.info("Starting Investment Advisor agent creation...")
 
         # Create Alpha Vantage MCP client for financial data
-        print("[AGENT] Creating Alpha Vantage MCP client...")
+        logger.info("Creating Alpha Vantage MCP client...")
         alpha_vantage_client = create_alpha_vantage_mcp_client()
-        print("[AGENT] Alpha Vantage MCP client created successfully")
+        logger.info("Alpha Vantage MCP client created successfully")
 
-        # Create Gateway MCP client for chart generation
-        print("[AGENT] Creating Investment Advisor agent with Alpha Vantage and Code Interpreter...")
+        # Create Investment Advisor agent with all tools
+        logger.info("Creating Investment Advisor agent with Alpha Vantage, Code Interpreter, and Investment Tracking...")
         agent = Agent(
             name="InvestmentAdvisor",
             system_prompt=system_prompt,
             tools=[
                 alpha_vantage_client,  # Alpha Vantage financial tools
                 code_tools.execute_python_securely,  # Code Interpreter for calculations
+                tracking_tools.record_investment,  # Investment tracking tools
+                tracking_tools.get_portfolio_performance,
+                tracking_tools.update_investment_price,
+                tracking_tools.compare_forecast_actual,
             ],
             model=bedrock_model,
             session_manager=session_manager,
@@ -424,13 +622,13 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
                 "session.id": session_id,
             },
         )
-        print("[AGENT] Investment Advisor agent created successfully with memory and financial tools")
+        logger.info("Investment Advisor agent created successfully with memory, financial tools, and investment tracking")
         return agent
 
     except Exception as e:
-        print(f"[AGENT ERROR] Error creating Investment Advisor agent: {e}")
-        print(f"[AGENT ERROR] Exception type: {type(e).__name__}")
-        print("[AGENT ERROR] Traceback:")
+        logger.error("Error creating Investment Advisor agent: %s", e)
+        logger.error("Exception type: %s", type(e).__name__)
+        logger.error("Traceback:")
         traceback.print_exc()
         raise
 

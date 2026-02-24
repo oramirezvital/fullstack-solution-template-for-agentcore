@@ -23,30 +23,32 @@ export function ChatHeader({ title, onNewChat, canStartNewChat }: ChatHeaderProp
   const { isAuthenticated, signOut } = useAuth()
 
   return (
-    <header className="flex items-center justify-between px-6 py-4 border-b w-full glass-effect backdrop-blur-md">
+    <header className="flex items-center justify-between px-6 py-4 border-b w-full bg-tv-background-secondary border-tv-border">
       <div className="flex items-center gap-3">
-        {/* Modern logo/icon */}
-        <div className="w-10 h-10 rounded-xl gradient-bg-brand flex items-center justify-center shadow-lg">
-          <span className="text-white font-bold text-lg">F</span>
+        {/* Stock market logo/icon */}
+        <div className="w-10 h-10 rounded-lg bg-tv-accent-blue flex items-center justify-center shadow-lg">
+          <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+          </svg>
         </div>
-        <h1 className="text-xl font-bold bg-gradient-to-r from-gray-800 to-gray-600 dark:from-gray-100 dark:to-gray-300 bg-clip-text text-transparent">
-          {title || "FAST Chat"}
+        <h1 className="text-xl font-bold text-tv-text-primary">
+          {title || "Stock Market Data"}
         </h1>
       </div>
       <div className="flex items-center gap-3">
         <Button 
           onClick={onNewChat} 
           variant="outline" 
-          className="gap-2 rounded-full hover:scale-105 transition-transform duration-200 shadow-sm" 
+          className="gap-2 rounded-lg bg-tv-background-tertiary border-tv-border text-tv-text-primary hover:bg-tv-accent-blue hover:text-white transition-all duration-200" 
           disabled={!canStartNewChat}
         >
           <Plus className="h-4 w-4" />
-          New Chat
+          New Analysis
         </Button>
         {isAuthenticated && (
           <AlertDialog>
             <AlertDialogTrigger asChild>
-              <Button variant="outline" className="rounded-full hover:scale-105 transition-transform duration-200 shadow-sm">
+              <Button variant="outline" className="rounded-lg bg-tv-background-tertiary border-tv-border text-tv-text-primary hover:bg-tv-danger-red hover:text-white transition-all duration-200">
                 Logout
               </Button>
             </AlertDialogTrigger>
