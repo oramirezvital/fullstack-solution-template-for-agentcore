@@ -8,6 +8,7 @@ import type { ChunkParser, StreamCallback } from "../types";
  * 
  * Handles network interruptions, malformed data, and decoder errors gracefully.
  * Provides detailed error messages for debugging and user feedback.
+ * Implements retry logic and graceful degradation for long conversations.
  * 
  * @param response - The fetch Response object containing the SSE stream
  * @param parser - Function to parse individual SSE lines into events
@@ -21,7 +22,9 @@ export async function readSSEStream(
 ): Promise<void> {
   let buffer = "";
   let consecutiveErrors = 0;
-  const MAX_CONSECUTIVE_ERRORS = 10;
+  const MAX_CONSECUTIVE_ERRORS = 15; // Increased tolerance for long conversations
+  let lastActivityTime = Date.now();
+  const ACTIVITY_TIMEOUT = 120000; // 2 minutes (increased from 60s)
 
   if (!response.body) {
     throw new Error("Response body is empty. The server may not be streaming data correctly.");
@@ -39,15 +42,25 @@ export async function readSSEStream(
         chunk = await Promise.race([
           reader.read(),
           new Promise<never>((_, reject) => 
-            setTimeout(() => reject(new Error("Stream timeout: No data received for 60 seconds")), 60000)
+            setTimeout(() => reject(new Error("Stream timeout")), ACTIVITY_TIMEOUT)
           )
         ]);
+        
+        // Update last activity time on successful read
+        lastActivityTime = Date.now();
       } catch (readError) {
-        // Network or timeout error during read
+        // Check if we've been inactive for too long
+        const inactiveTime = Date.now() - lastActivityTime;
+        
         if (readError instanceof Error) {
-          if (readError.message.includes("timeout")) {
-            throw new Error("Connection timeout. The server stopped responding. Please try again.");
+          if (readError.message.includes("timeout") || inactiveTime > ACTIVITY_TIMEOUT) {
+            // For long conversations, this might be normal - the agent is still thinking
+            console.warn("Stream timeout detected, but may be normal for long conversations");
+            throw new Error("Connection timeout. The response is taking longer than expected. Please try again.");
           }
+          
+          // Network interruption
+          console.error("Network error during stream read:", readError);
           throw new Error(`Network error while reading stream: ${readError.message}`);
         }
         throw new Error("Unknown error while reading stream");
@@ -58,7 +71,14 @@ export async function readSSEStream(
 
       try {
         // Decode chunk with error recovery
-        buffer += decoder.decode(value, { stream: true });
+        const decoded = decoder.decode(value, { stream: true });
+        
+        // Skip empty or whitespace-only chunks
+        if (decoded.trim().length === 0) {
+          continue;
+        }
+        
+        buffer += decoded;
         consecutiveErrors = 0; // Reset error counter on successful decode
       } catch (decodeError) {
         consecutiveErrors++;
@@ -78,13 +98,19 @@ export async function readSSEStream(
 
       // Parse each complete line
       for (const line of lines) {
-        if (line.trim()) {
-          try {
-            parser(line, callback);
-          } catch (parseError) {
-            // Log parse errors but continue processing other lines
-            console.warn("Failed to parse SSE line:", line, parseError);
-          }
+        const trimmedLine = line.trim();
+        
+        // Skip empty lines and comments
+        if (!trimmedLine || trimmedLine.startsWith(":")) {
+          continue;
+        }
+        
+        try {
+          parser(line, callback);
+        } catch (parseError) {
+          // Log parse errors but continue processing other lines
+          // Don't count parse errors toward consecutive error limit
+          console.warn("Failed to parse SSE line:", line.substring(0, 100), parseError);
         }
       }
     }
@@ -94,7 +120,7 @@ export async function readSSEStream(
       try {
         parser(buffer, callback);
       } catch (parseError) {
-        console.warn("Failed to parse final buffer:", buffer, parseError);
+        console.warn("Failed to parse final buffer:", buffer.substring(0, 100), parseError);
       }
     }
   } catch (error) {

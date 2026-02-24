@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ThumbsUp, ThumbsDown, Bot, User } from "lucide-react"
+import { ThumbsUp, ThumbsDown, Bot, User, Download } from "lucide-react"
 import { Message } from "./types"
 import { FeedbackDialog } from "./FeedbackDialog"
 import { getToolRenderer } from "@/hooks/useToolRenderer"
@@ -34,6 +34,35 @@ export function ChatMessage({ message, sessionId: _sessionId, onFeedbackSubmit }
     setFeedbackSubmitted(true)
   }
 
+  const downloadExcelFile = (base64Data: string, filename: string) => {
+    try {
+      // Convert base64 to blob
+      const byteCharacters = atob(base64Data);
+      const byteNumbers = new Array(byteCharacters.length);
+      for (let i = 0; i < byteCharacters.length; i++) {
+        byteNumbers[i] = byteCharacters.charCodeAt(i);
+      }
+      const byteArray = new Uint8Array(byteNumbers);
+      const blob = new Blob([byteArray], { 
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' 
+      });
+      
+      // Create download link
+      const url = window.URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      
+      // Cleanup
+      document.body.removeChild(link);
+      window.URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('Error downloading Excel file:', error);
+    }
+  };
+
   const renderAssistantContent = () => {
     // If segments exist, render them in order (interleaved text + tools)
     if (message.segments && message.segments.length > 0) {
@@ -41,6 +70,45 @@ export function ChatMessage({ message, sessionId: _sessionId, onFeedbackSubmit }
         if (seg.type === "text") {
           return <MarkdownRenderer key={i} content={seg.content} />;
         }
+        
+        // Check for Excel export tool
+        if (seg.toolCall.name === "export_portfolio_to_excel" && seg.toolCall.result) {
+          try {
+            const result = JSON.parse(seg.toolCall.result);
+            if (result.success && result.data) {
+              return (
+                <div key={seg.toolCall.toolUseId} className="my-3">
+                  <div className="bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded-lg p-4">
+                    <div className="flex items-start gap-3">
+                      <Download className="text-green-600 dark:text-green-400 mt-1" size={20} />
+                      <div className="flex-1">
+                        <h4 className="font-semibold text-green-800 dark:text-green-300 mb-1">
+                          Portfolio Export Ready
+                        </h4>
+                        <p className="text-sm text-green-700 dark:text-green-400 mb-3">
+                          Your portfolio has been exported to Excel with {result.sheets?.length || 4} sheets
+                        </p>
+                        <button
+                          onClick={() => downloadExcelFile(result.data, result.filename)}
+                          className="inline-flex items-center gap-2 px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg transition-colors text-sm font-medium"
+                        >
+                          <Download size={16} />
+                          Download {result.filename}
+                        </button>
+                        <div className="mt-2 text-xs text-green-600 dark:text-green-400">
+                          Size: {result.size_kb?.toFixed(1)} KB • {result.total_positions} positions
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              );
+            }
+          } catch (error) {
+            console.error('Error parsing Excel export result:', error);
+          }
+        }
+        
         const render = getToolRenderer(seg.toolCall.name);
         if (!render) return null;
         return (

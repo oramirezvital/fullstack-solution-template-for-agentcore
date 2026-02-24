@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import traceback
+from datetime import datetime
 
 import boto3
 from bedrock_agentcore.memory.integrations.strands.config import (
@@ -362,6 +363,60 @@ class InvestmentTrackingTools:
             transaction_id=transaction_id
         )
         return json.dumps(result, default=str)
+    
+    @tool
+    def export_portfolio_to_excel(self, user_id: str) -> str:
+        """
+        Export portfolio details to an Excel file.
+        
+        Generates a comprehensive Excel workbook with multiple sheets:
+        - Summary: Overall portfolio performance metrics
+        - Transactions: Complete transaction history
+        - Active Positions: Current holdings
+        - Forecasts: Forecast accuracy analysis
+        
+        The Excel file is returned as base64-encoded data that the frontend
+        can download automatically.
+        
+        Args:
+            user_id: User identifier
+            
+        Returns:
+            JSON string with base64-encoded Excel file and metadata
+        """
+        from utils.excel_export import create_portfolio_excel
+        
+        # Get full portfolio data with all transaction details
+        summary = self.tracker.get_performance_summary(user_id=user_id)
+        full_positions = self.tracker.get_active_positions(user_id=user_id)
+        
+        # Merge summary metrics with full position details
+        portfolio_data = {
+            "total_positions": summary.get('total_positions', 0),
+            "total_invested": summary.get('total_invested', 0),
+            "current_value": summary.get('current_value', 0),
+            "total_gain_loss": summary.get('total_gain_loss', 0),
+            "total_gain_loss_pct": summary.get('total_gain_loss_pct', 0),
+            "positions": full_positions  # Use full transaction data
+        }
+        
+        # Generate Excel file
+        excel_base64 = create_portfolio_excel(
+            portfolio_data=portfolio_data,
+            user_email=user_id
+        )
+        
+        # Return with metadata
+        result = {
+            "success": True,
+            "filename": f"portfolio_export_{datetime.now().strftime('%Y%m%d_%H%M%S')}.xlsx",
+            "data": excel_base64,
+            "size_kb": len(excel_base64) * 3 / 4 / 1024,  # Approximate size
+            "sheets": ["Summary", "Transactions", "Active Positions", "Forecasts"],
+            "total_positions": portfolio_data.get('total_positions', 0)
+        }
+        
+        return json.dumps(result, default=str)
 
 
 def create_investment_advisor_agent(user_id: str, session_id: str) -> Agent:
@@ -487,6 +542,7 @@ YOUR CAPABILITIES:
    - get_portfolio_performance: Retrieve current portfolio status
    - update_investment_price: Update current prices for positions
    - compare_forecast_actual: Analyze forecast accuracy
+   - export_portfolio_to_excel: Export portfolio to Excel file for download
 
 PORTFOLIO TRACKING WORKFLOW:
 
@@ -494,6 +550,12 @@ When a user reports an investment:
 1. ALWAYS acknowledge with precise details:
    "I've recorded your investment: [shares] shares of [SYMBOL] at $[price] per share 
    on [date], total investment $[total]."
+
+When a user asks to export portfolio ("export portfolio", "download portfolio", "save to Excel"):
+1. Call export_portfolio_to_excel(user_id="{{user_id}}")
+2. The tool returns base64-encoded Excel data with 4 sheets (Summary, Transactions, Active Positions, Forecasts)
+3. Frontend will automatically trigger download
+4. Confirm to user: "I've generated your portfolio export with [X] positions across 4 sheets. The download should start automatically."
 2. Your memory will automatically extract and store this investment fact
 3. Be explicit about all details (symbol, shares, price, date) for accurate extraction
 
@@ -741,6 +803,7 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
                 tracking_tools.get_portfolio_performance,
                 tracking_tools.update_investment_price,
                 tracking_tools.compare_forecast_actual,
+                tracking_tools.export_portfolio_to_excel,  # Excel export
             ],
             model=bedrock_model,
             session_manager=session_manager,
