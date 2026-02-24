@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import traceback
 
@@ -19,6 +20,14 @@ from strands.tools.mcp import MCPClient
 from strands_code_interpreter import StrandsCodeInterpreterTools
 
 from utils.auth import extract_user_id_from_context
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='[%(asctime)s] %(levelname)s [%(name)s] %(message)s',
+    datefmt='%Y-%m-%d %H:%M:%S'
+)
+logger = logging.getLogger(__name__)
 
 app = BedrockAgentCoreApp()
 
@@ -43,21 +52,37 @@ def create_alpha_vantage_mcp_client() -> MCPClient:
         MCPClient: Configured client for Alpha Vantage MCP server
         
     Raises:
-        ValueError: If STACK_NAME environment variable is not set
-        Exception: If API key cannot be retrieved from Secrets Manager
+        ValueError: If STACK_NAME environment variable is not set or API key is invalid
+        RuntimeError: If API key cannot be retrieved from Secrets Manager
     """
     from utils.auth import get_secret
     
     # Get stack name for secret path
     stack_name = os.environ.get("STACK_NAME")
     if not stack_name:
-        raise ValueError("STACK_NAME environment variable is required")
+        raise ValueError(
+            "STACK_NAME environment variable is required. "
+            "This should be set by the CDK deployment in backend-stack.ts"
+        )
     
-    print("[AGENT] Retrieving Alpha Vantage API key from Secrets Manager...")
+    logger.info("Retrieving Alpha Vantage API key from Secrets Manager...")
     
-    # Fetch API key from Secrets Manager
-    api_key = get_secret(f"/{stack_name}/alpha_vantage_api_key")
+    # Fetch API key from Secrets Manager with proper error handling
+    try:
+        api_key = get_secret(f"/{stack_name}/alpha_vantage_api_key")
+    except ValueError as e:
+        logger.error("Failed to retrieve Alpha Vantage API key: %s", e)
+        raise ValueError(
+            f"Alpha Vantage API key not found in Secrets Manager. "
+            f"Please create the secret: /{stack_name}/alpha_vantage_api_key"
+        ) from e
+    except Exception as e:
+        logger.error("Unexpected error retrieving Alpha Vantage API key: %s", e)
+        raise RuntimeError(
+            f"Failed to retrieve Alpha Vantage API key from Secrets Manager: {str(e)}"
+        ) from e
     
+    # Validate API key
     if not api_key or api_key == "PLACEHOLDER_UPDATE_AFTER_DEPLOYMENT":
         raise ValueError(
             "Alpha Vantage API key not configured. "
@@ -65,20 +90,25 @@ def create_alpha_vantage_mcp_client() -> MCPClient:
             f"/{stack_name}/alpha_vantage_api_key"
         )
     
-    print("[AGENT] Creating Alpha Vantage MCP client...")
+    logger.info("Creating Alpha Vantage MCP client...")
     
     # Alpha Vantage MCP server URL with API key authentication
     alpha_vantage_url = f"https://mcp.alphavantage.co/mcp?apikey={api_key}"
     
-    # Create MCP client for Alpha Vantage - direct connection, no wrapper
-    # This follows the official FAST pattern and ensures proper ToolProvider interface
-    alpha_vantage_client = MCPClient(
-        lambda: streamablehttp_client(url=alpha_vantage_url),
-        prefix="alphavantage",
-    )
-    
-    print("[AGENT] Alpha Vantage MCP client created successfully")
-    return alpha_vantage_client
+    try:
+        # Create MCP client for Alpha Vantage - direct connection, no wrapper
+        # This follows the official FAST pattern and ensures proper ToolProvider interface
+        alpha_vantage_client = MCPClient(
+            lambda: streamablehttp_client(url=alpha_vantage_url),
+            prefix="alphavantage",
+        )
+        logger.info("Alpha Vantage MCP client created successfully")
+        return alpha_vantage_client
+    except Exception as e:
+        logger.error("Failed to create Alpha Vantage MCP client: %s", e)
+        raise RuntimeError(
+            f"Failed to initialize Alpha Vantage MCP client: {str(e)}"
+        ) from e
 
 
 # Gateway MCP Client (currently not used for charts, but kept for future MCP tools)

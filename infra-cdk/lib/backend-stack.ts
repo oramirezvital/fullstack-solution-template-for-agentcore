@@ -78,11 +78,8 @@ export class BackendStack extends cdk.NestedStack {
     // Create AgentCore Gateway with chart generation tool
     this.createAgentCoreGateway(props.config)
 
-    // Create Alpha Vantage cache table for API response caching
-    const alphaVantageCache = this.createAlphaVantageCache(props.config)
-
     // Create AgentCore Runtime resources
-    this.createAgentCoreRuntime(props.config, alphaVantageCache)
+    this.createAgentCoreRuntime(props.config)
 
     // Store runtime ARN in SSM for frontend stack
     this.createRuntimeSSMParameters(props.config)
@@ -98,7 +95,7 @@ export class BackendStack extends cdk.NestedStack {
     this.createFeedbackApi(props.config, props.frontendUrl, feedbackTable)
   }
 
-  private createAgentCoreRuntime(config: AppConfig, cacheTable: dynamodb.Table): void {
+  private createAgentCoreRuntime(config: AppConfig): void {
     const pattern = config.backend?.pattern || "strands-single-agent"
 
     // Parameters
@@ -344,9 +341,6 @@ export class BackendStack extends cdk.NestedStack {
       secretStringValue: cdk.SecretValue.unsafePlainText("PLACEHOLDER_UPDATE_AFTER_DEPLOYMENT"),
     })
 
-    // Grant agent role access to Alpha Vantage cache table
-    cacheTable.grantReadWriteData(agentRole)
-
     // Environment variables for the runtime
     const envVars: { [key: string]: string } = {
       AWS_REGION: stack.region,
@@ -355,7 +349,6 @@ export class BackendStack extends cdk.NestedStack {
       // ALPHA_VANTAGE_API_KEY removed - now fetched from Secrets Manager at runtime
       STACK_NAME: config.stack_name_base, // Stack name for Gateway authentication and secret retrieval
       GATEWAY_URL: this.gatewayUrl, // Gateway URL for chart generation
-      CACHE_TABLE_NAME: cacheTable.tableName, // DynamoDB cache table for Alpha Vantage responses
     }
 
     // Create the runtime using L2 construct
@@ -491,48 +484,7 @@ export class BackendStack extends cdk.NestedStack {
     return feedbackTable
   }
 
-  /**
-   * Creates a DynamoDB table for caching Alpha Vantage API responses.
-   * 
-   * This cache table reduces API calls to Alpha Vantage by storing responses
-   * with automatic TTL-based expiration. The cache is shared across all users
-   * since stock market data is public and identical for everyone.
-   * 
-   * Table Schema:
-   * - Partition Key: cache_key (STRING) - Format: {tool_name}#{symbol}#{params_hash}
-   * - Attributes:
-   *   - response_data (STRING) - JSON-encoded API response
-   *   - expiration_time (NUMBER) - Unix timestamp for TTL
-   *   - created_at (NUMBER) - Unix timestamp when cached
-   *   - tool_name (STRING) - Alpha Vantage tool name for monitoring
-   * 
-   * TTL Strategy:
-   * - Real-time quotes (GLOBAL_QUOTE): 1 minute
-   * - Daily time series (TIME_SERIES_DAILY): 24 hours
-   * - Company fundamentals (COMPANY_OVERVIEW, EARNINGS): 7 days
-   * - Technical indicators (RSI, MACD, etc.): 1 hour
-   * 
-   * @param config - Application configuration containing stack name
-   * @returns DynamoDB Table construct for Alpha Vantage cache
-   */
-  private createAlphaVantageCache(config: AppConfig): dynamodb.Table {
-    const cacheTable = new dynamodb.Table(this, "AlphaVantageCache", {
-      tableName: `${config.stack_name_base}-alpha-vantage-cache`,
-      partitionKey: {
-        name: "cache_key",
-        type: dynamodb.AttributeType.STRING,
-      },
-      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
-      timeToLiveAttribute: "expiration_time",
-      removalPolicy: cdk.RemovalPolicy.DESTROY,
-      pointInTimeRecoverySpecification: {
-        pointInTimeRecoveryEnabled: true,
-      },
-      encryption: dynamodb.TableEncryption.AWS_MANAGED,
-    })
 
-    return cacheTable
-  }
 
   /**
    * Creates an API Gateway with Lambda integration for the feedback endpoint.

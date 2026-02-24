@@ -5,6 +5,36 @@ All notable changes to the Fullstack AgentCore Solution Template (FAST) will be 
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Stock Market Data v1]
+
+### Added
+
+- Alpha Vantage MCP server integration for comprehensive financial data (100+ tools)
+- Investment Advisor agent with long-term memory for portfolio tracking
+- JSON-based chart generation using Recharts (replaced Gateway chart tool)
+- AWS Secrets Manager integration for secure API key storage
+
+### Changed
+
+- Migrated Alpha Vantage API key from environment variables to Secrets Manager
+- Simplified chart generation: agent returns JSON, frontend renders with Recharts
+- Removed MCP client wrapper to follow official FAST patterns (direct MCPClient usage)
+- Removed DynamoDB caching layer (using premium Alpha Vantage API tier instead)
+- Enhanced agent system prompt with explicit MCP tool usage instructions
+
+### Removed
+
+- CachedAlphaVantageMCPClient wrapper (broke ToolProvider interface)
+- DynamoDB cache table for Alpha Vantage responses
+- Cache utility files (alpha_vantage_cache.py, cached_alpha_vantage_client.py)
+- Gateway chart tool Lambda (charts now use JSON format)
+
+### Fixed
+
+- Chart markdown rendering after chart blocks (stripped code fence backticks)
+- Agent now correctly uses Alpha Vantage MCP tools instead of Code Interpreter for API calls
+- Chart JSON extraction with improved brace counting and detection
+
 ## [0.3.1] - 2026-02-11
 
 ### Added
