@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react"
 import { ChatHeader } from "./ChatHeader"
 import { ChatInput } from "./ChatInput"
 import { ChatMessages } from "./ChatMessages"
+import { MessageHistory } from "./MessageHistory"
 import { Message, MessageSegment, ToolCall } from "./types"
 
 import { useGlobal } from "@/app/context/GlobalContext"
@@ -13,6 +14,7 @@ import { submitFeedback } from "@/services/feedbackService"
 import { useAuth } from "react-oidc-context"
 import { useDefaultTool } from "@/hooks/useToolRenderer"
 import { ToolCallDisplay } from "./ToolCallDisplay"
+import { getRecentMessages, addMessageToHistory } from "@/lib/messageHistory"
 
 export default function ChatInterface() {
   const [messages, setMessages] = useState<Message[]>([])
@@ -20,6 +22,7 @@ export default function ChatInterface() {
   const [error, setError] = useState<string | null>(null)
   const [client, setClient] = useState<AgentCoreClient | null>(null)
   const [sessionId] = useState(() => crypto.randomUUID())
+  const [messageHistory, setMessageHistory] = useState<string[]>([])
 
   const { isLoading, setIsLoading } = useGlobal()
   const auth = useAuth()
@@ -31,6 +34,11 @@ export default function ChatInterface() {
   useDefaultTool(({ name, args, status, result }) => (
     <ToolCallDisplay name={name} args={args} status={status} result={result} />
   ))
+
+  // Load message history on mount
+  useEffect(() => {
+    setMessageHistory(getRecentMessages())
+  }, [])
 
   // Load agent configuration and create client on mount
   useEffect(() => {
@@ -69,6 +77,10 @@ export default function ChatInterface() {
 
   const sendMessage = async (userMessage: string) => {
     if (!userMessage.trim() || !client) return
+
+    // Add message to history
+    addMessageToHistory(userMessage)
+    setMessageHistory(getRecentMessages())
 
     // Clear any previous errors
     setError(null)
@@ -275,6 +287,13 @@ export default function ChatInterface() {
     // If you want a new session ID, you'd need to remount the component
   }
 
+  // Handle selecting a message from history
+  const handleSelectHistoryMessage = (message: string) => {
+    setInput(message)
+    // Optionally auto-send the message
+    // sendMessage(message)
+  }
+
   // Check if this is the initial state (no messages)
   const isInitialState = messages.length === 0
 
@@ -299,6 +318,16 @@ export default function ChatInterface() {
       {/* Fixed header */}
       <div className="flex-none">
         <ChatHeader onNewChat={startNewChat} canStartNewChat={hasAssistantMessages} />
+        
+        {/* Message History */}
+        {messageHistory.length > 0 && (
+          <MessageHistory 
+            messages={messageHistory} 
+            onSelectMessage={handleSelectHistoryMessage}
+            isLoading={isLoading}
+          />
+        )}
+        
         {error && (
           <div className="bg-red-50 dark:bg-red-900/20 border-l-4 border-red-500 p-4 mx-4 mt-2 rounded-r-lg animate-slide-in-right">
             <p className="text-sm text-red-700 dark:text-red-300">{error}</p>
@@ -331,7 +360,27 @@ export default function ChatInterface() {
             
             {/* Suggested prompts */}
             <div className="max-w-2xl mx-auto mb-8">
-              <p className="text-sm text-tv-text-secondary mb-4">Quick start:</p>
+              {messageHistory.length > 0 ? (
+                <>
+                  <p className="text-sm text-tv-text-secondary mb-4">Recent queries:</p>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-6">
+                    {messageHistory.slice(0, 4).map((message, index) => (
+                      <button
+                        key={index}
+                        onClick={() => handlePromptClick(message)}
+                        className="px-4 py-3 rounded-lg text-left text-sm bg-tv-background-tertiary border border-tv-border text-tv-text-primary hover:border-tv-accent-blue hover:bg-tv-background-secondary transition-all duration-200 truncate"
+                        disabled={isLoading}
+                        title={message}
+                      >
+                        {message}
+                      </button>
+                    ))}
+                  </div>
+                  <p className="text-sm text-tv-text-secondary mb-4">Or try:</p>
+                </>
+              ) : (
+                <p className="text-sm text-tv-text-secondary mb-4">Quick start:</p>
+              )}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                 {suggestedPrompts.map((prompt, index) => (
                   <button

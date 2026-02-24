@@ -311,8 +311,13 @@ def create_investment_advisor_agent(user_id: str, session_id: str) -> Agent:
         ValueError: If required environment variables (MEMORY_ID, ALPHA_VANTAGE_API_KEY) are missing
         Exception: If MCP client creation or memory configuration fails
     """
-    system_prompt = """You are an experienced Investment Advisor with access to comprehensive 
+    system_prompt = f"""You are an experienced Investment Advisor with access to comprehensive 
 financial market data, analysis tools, and long-term memory of user portfolios.
+
+YOUR USER IDENTITY:
+- Your current user_id is: {user_id}
+- ALWAYS use this exact user_id when calling investment tracking tools
+- This ensures you access the correct portfolio data for this user
 
 YOUR CAPABILITIES:
 
@@ -410,7 +415,7 @@ Would you like me to record this investment for tracking?"
 
 If user confirms:
 record_investment(
-    user_id="{user_id}",
+    user_id="{{user_id}}",  # Use the user_id provided above
     symbol="AAPL",
     company_name="Apple Inc.",
     units=10,
@@ -418,6 +423,7 @@ record_investment(
     recommendation_reason="Strong Q1 earnings, positive analyst sentiment",
     forecast_target_price=210.00,
     forecast_timeframe_days=90
+)
 )
 
 When analyzing recommendation accuracy:
@@ -454,23 +460,23 @@ When user asks for a chart (e.g., "Chart the 1-week price trend for AMAZON"):
    Here's the 1-week price trend for Tesla:
    
    (three backticks)json
-   {
+   {{
      "type": "chart",
      "chartType": "line",
      "title": "Tesla (TSLA) - 1 Week Price Trend",
-     "data": {
+     "data": {{
        "labels": ["Feb 11", "Feb 12", "Feb 13"],
-       "datasets": [{
+       "datasets": [{{
          "label": "TSLA Price (USD)",
          "data": [448.25, 451.90, 455.30],
          "color": "#3fb950"
-       }]
-     },
-     "options": {
+       }}]
+     }},
+     "options": {{
        "yAxisLabel": "Price (USD)",
        "xAxisLabel": "Date"
-     }
-   }
+     }}
+   }}
    (three backticks)
    
    Based on the data, Tesla's price increased by 1.6% this week.
@@ -562,12 +568,12 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
         actor_id=user_id,
         retrieval_config={
             # Retrieve investment facts with high top_k to get all investments
-            "/investments/{actorId}": RetrievalConfig(
+            "/investments/{{actorId}}": RetrievalConfig(
                 top_k=50,  # Retrieve up to 50 investment records
                 relevance_score=0.3,  # Lower threshold to capture all investments
             ),
             # Retrieve user investment preferences
-            "/preferences/{actorId}": RetrievalConfig(
+            "/preferences/{{actorId}}": RetrievalConfig(
                 top_k=10,  # Top 10 preferences
                 relevance_score=0.5,  # Medium threshold for relevant preferences
             ),

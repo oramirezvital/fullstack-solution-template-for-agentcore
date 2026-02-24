@@ -53,16 +53,16 @@ export function ChatInput({
     <div className={`p-4 w-full ${className}`}>
       <form
         onSubmit={handleSubmit}
-        className="flex space-x-3 w-full items-end glass-effect rounded-2xl shadow-xl p-4 focus-glow transition-all duration-200"
+        className="flex space-x-3 w-full items-end bg-tv-background-tertiary rounded-xl shadow-xl p-4 border-2 border-tv-border focus-within:border-tv-accent-blue transition-all duration-200"
       >
         <Textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
-          placeholder="Type your message... (Ctrl+Enter for new line)"
+          placeholder="Ask about stocks, market trends, or portfolio analysis..."
           disabled={isLoading}
-          className="flex-1 min-h-[40px] max-h-[200px] resize-none py-2 bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0"
+          className="flex-1 min-h-[40px] max-h-[200px] resize-none py-2 bg-transparent border-none focus-visible:ring-0 focus-visible:ring-offset-0 text-tv-text-primary placeholder:text-tv-text-secondary"
           rows={1}
           autoFocus
         />
@@ -70,7 +70,7 @@ export function ChatInput({
         <Button 
           type="submit" 
           disabled={!input.trim() || isLoading} 
-          className="h-11 px-6 rounded-xl gradient-bg-brand hover:opacity-90 transition-all duration-200 shadow-md hover:shadow-lg hover:scale-105"
+          className="h-11 px-6 rounded-lg bg-tv-accent-blue hover:bg-blue-600 text-white transition-all duration-200 shadow-md hover:shadow-lg"
         >
           {isLoading ? (
             <>
