@@ -344,6 +344,18 @@ export class BackendStack extends cdk.NestedStack {
       secretStringValue: cdk.SecretValue.unsafePlainText("PLACEHOLDER_UPDATE_AFTER_DEPLOYMENT"),
     })
 
+    // Store Tavily API key in Secrets Manager for web search
+    // This secret should be updated after deployment with the actual API key
+    const tavilyApiKeySecret = new secretsmanager.Secret(this, "TavilyApiKey", {
+      secretName: `/${config.stack_name_base}/tavily_api_key`,
+      description: "Tavily API key for web search via MCP",
+      secretStringValue: cdk.SecretValue.unsafePlainText("PLACEHOLDER_UPDATE_AFTER_DEPLOYMENT"),
+    })
+
+    // Grant agent role read access to both API key secrets
+    alphaVantageApiKeySecret.grantRead(agentRole)
+    tavilyApiKeySecret.grantRead(agentRole)
+
     // Environment variables for the runtime
     const envVars: { [key: string]: string } = {
       AWS_REGION: stack.region,

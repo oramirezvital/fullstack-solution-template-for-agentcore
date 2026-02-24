@@ -8,7 +8,7 @@ Test Stock Tool via AgentCore Gateway.
 
 Usage:
     python test-scripts/test-stock-tool.py [SYMBOL]
-    
+
 Example:
     python test-scripts/test-stock-tool.py AAPL
     python test-scripts/test-stock-tool.py GOOGL
@@ -53,20 +53,18 @@ def get_secret(secret_name: str) -> str:
         response = secrets_client.get_secret_value(SecretId=secret_name)
         return response["SecretString"]
     except Exception as e:
-        raise RuntimeError(
-            f"Error retrieving secret {secret_name}: {str(e)}"
-        )
+        raise RuntimeError(f"Error retrieving secret {secret_name}: {str(e)}")
 
 
 def fetch_access_token(client_id: str, client_secret: str, token_url: str) -> str:
     """
     Fetch access token using client credentials flow.
-    
+
     Args:
         client_id: Cognito client ID
         client_secret: Cognito client secret
         token_url: OAuth2 token endpoint URL
-        
+
     Returns:
         Access token string
     """
@@ -89,11 +87,11 @@ def fetch_access_token(client_id: str, client_secret: str, token_url: str) -> st
 def list_tools(gateway_url: str, access_token: str) -> dict:
     """
     List available tools via gateway.
-    
+
     Args:
         gateway_url: Gateway endpoint URL
         access_token: OAuth2 access token
-        
+
     Returns:
         Dictionary containing available tools
     """
@@ -120,13 +118,13 @@ def call_tool(
 ) -> dict:
     """
     Call a specific tool via gateway.
-    
+
     Args:
         gateway_url: Gateway endpoint URL
         access_token: OAuth2 access token
         tool_name: Name of the tool to call (with target prefix)
         arguments: Dictionary of tool arguments
-        
+
     Returns:
         Dictionary containing tool response
     """
@@ -198,7 +196,7 @@ def main():
 
     tools = list_tools(gateway_url, access_token)
     print_msg("Gateway call successful")
-    
+
     tool_list = tools.get("result", {}).get("tools", [])
     if not tool_list:
         print_msg("No tools found in gateway", "error")
@@ -245,10 +243,10 @@ def main():
         sys.exit(1)
 
     print_msg("Tool call successful")
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("STOCK INFORMATION")
-    print("="*60 + "\n")
-    
+    print("=" * 60 + "\n")
+
     # Extract and display the stock information
     content = tool_result["result"]["content"]
     if content and len(content) > 0:
@@ -257,7 +255,7 @@ def main():
     else:
         print("No stock information returned")
 
-    print("\n" + "="*60)
+    print("\n" + "=" * 60)
     print("\nRaw Response:")
     print(json.dumps(tool_result, indent=2))
 

@@ -112,6 +112,85 @@ def create_alpha_vantage_mcp_client() -> MCPClient:
         ) from e
 
 
+def create_tavily_mcp_client() -> MCPClient:
+    """
+    Create MCP client for Tavily web search API.
+    
+    Tavily provides AI-optimized web search perfect for financial research,
+    news, and market intelligence. The client connects to Tavily's hosted
+    MCP server using an API key for authentication.
+    
+    This function creates a direct connection to Tavily's Remote MCP server following
+    the same pattern as Alpha Vantage. This ensures proper ToolProvider interface
+    implementation and automatic lifecycle management.
+    
+    The API key is securely retrieved from AWS Secrets Manager at runtime, ensuring
+    it is never hardcoded in the source code or exposed in git.
+    
+    Returns:
+        MCPClient: Configured client for Tavily MCP server
+        
+    Raises:
+        ValueError: If STACK_NAME environment variable is not set or API key is invalid
+        RuntimeError: If API key cannot be retrieved from Secrets Manager
+    """
+    from utils.auth import get_secret
+    
+    # Get stack name for secret path
+    stack_name = os.environ.get("STACK_NAME")
+    if not stack_name:
+        raise ValueError(
+            "STACK_NAME environment variable is required. "
+            "This should be set by the CDK deployment in backend-stack.ts"
+        )
+    
+    logger.info("Retrieving Tavily API key from Secrets Manager...")
+    
+    # Fetch API key from Secrets Manager with proper error handling
+    try:
+        api_key = get_secret(f"/{stack_name}/tavily_api_key")
+    except ValueError as e:
+        logger.error("Failed to retrieve Tavily API key: %s", e)
+        raise ValueError(
+            f"Tavily API key not found in Secrets Manager. "
+            f"Please create the secret: /{stack_name}/tavily_api_key"
+        ) from e
+    except Exception as e:
+        logger.error("Unexpected error retrieving Tavily API key: %s", e)
+        raise RuntimeError(
+            f"Failed to retrieve Tavily API key from Secrets Manager: {str(e)}"
+        ) from e
+    
+    # Validate API key
+    if not api_key or api_key == "PLACEHOLDER_UPDATE_AFTER_DEPLOYMENT":
+        raise ValueError(
+            "Tavily API key not configured. "
+            "Please update the secret in AWS Secrets Manager: "
+            f"/{stack_name}/tavily_api_key"
+        )
+    
+    logger.info("Creating Tavily MCP client...")
+    
+    # Tavily MCP server URL with API key authentication
+    # Note: Tavily uses 'tavilyApiKey' parameter (not 'apikey')
+    tavily_url = f"https://mcp.tavily.com/mcp/?tavilyApiKey={api_key}"
+    
+    try:
+        # Create MCP client for Tavily - direct connection, no wrapper
+        # This follows the official FAST pattern and ensures proper ToolProvider interface
+        tavily_client = MCPClient(
+            lambda: streamablehttp_client(url=tavily_url),
+            prefix="tavily",
+        )
+        logger.info("Tavily MCP client created successfully")
+        return tavily_client
+    except Exception as e:
+        logger.error("Failed to create Tavily MCP client: %s", e)
+        raise RuntimeError(
+            f"Failed to initialize Tavily MCP client: {str(e)}"
+        ) from e
+
+
 # Gateway MCP Client (currently not used for charts, but kept for future MCP tools)
 # Uncomment and use this when adding other MCP tools via Gateway
 #
@@ -287,13 +366,14 @@ class InvestmentTrackingTools:
 
 def create_investment_advisor_agent(user_id: str, session_id: str) -> Agent:
     """
-    Create an Investment Advisor agent with Alpha Vantage financial data, Code Interpreter,
-    and long-term memory for portfolio tracking.
+    Create an Investment Advisor agent with Alpha Vantage financial data, Tavily web search,
+    Code Interpreter, and long-term memory for portfolio tracking.
 
     This function sets up a specialized investment advisor that can:
     1. Access 100+ Alpha Vantage financial tools (stocks, indicators, fundamentals)
-    2. Execute Python code for calculations and chart generation
-    3. Remember user investments and preferences across sessions using long-term memory
+    2. Search the web for news, research, and market intelligence (Tavily)
+    3. Execute Python code for calculations and chart generation
+    4. Remember user investments and preferences across sessions using long-term memory
     
     The agent uses AgentCore Memory with three strategies:
     - SemanticMemoryStrategy: Extracts investment facts (purchases, positions)
@@ -305,10 +385,10 @@ def create_investment_advisor_agent(user_id: str, session_id: str) -> Agent:
         session_id: Unique identifier for the conversation session
         
     Returns:
-        Agent: Configured investment advisor agent with financial tools and memory
+        Agent: Configured investment advisor agent with financial tools, web search, and memory
         
     Raises:
-        ValueError: If required environment variables (MEMORY_ID, ALPHA_VANTAGE_API_KEY) are missing
+        ValueError: If required environment variables (MEMORY_ID, STACK_NAME) are missing
         Exception: If MCP client creation or memory configuration fails
     """
     system_prompt = f"""You are an experienced Investment Advisor with access to comprehensive 
@@ -338,13 +418,48 @@ YOUR CAPABILITIES:
    - alphavantage_RSI(symbol="MSFT", interval="daily", time_period="14", series_type="close")
    - alphavantage_COMPANY_OVERVIEW(symbol="GOOGL")
 
-2. CHART GENERATION (JSON format):
+2. WEB SEARCH & MARKET INTELLIGENCE (Tavily MCP):
+   - Real-time web search for financial news and research
+   - Access to analyst reports, market commentary, and industry insights
+   - Extract content from specific URLs (articles, reports, press releases)
+   - Get direct answers to financial questions
+   - Particularly useful for:
+     * ARK Invest research and articles (https://www.ark-funds.com/articles/)
+     * Breaking financial news and market developments
+     * Analyst ratings and price targets
+     * Industry trends and competitive analysis
+     * Company announcements and press releases
+     * Federal Reserve announcements and economic policy
+   
+   **Available Tools:**
+   - tavily_search: Search the web for information
+   - tavily_extract: Extract content from specific URLs
+   - tavily_qna: Get direct answers to questions
+   
+   **CRITICAL: Use Tavily MCP tools (prefixed with "tavily_") for web searches.
+   Always cite sources with URLs when using web search results.**
+   
+   Example tool calls:
+   - tavily_search(query="ARK Invest Tesla investment thesis 2026")
+   - tavily_search(query="NVIDIA AI chip market share latest news", search_depth="advanced", max_results=5)
+   - tavily_extract(url="https://www.ark-funds.com/articles/innovation-investing")
+   - tavily_qna(query="What is the Federal Reserve's current interest rate?")
+   
+   When to use web search:
+   - User asks about recent news or developments
+   - User mentions specific sources (ARK Invest, Bloomberg, analyst reports)
+   - Need to verify or supplement Alpha Vantage data
+   - Research company background, management, or strategy
+   - Find analyst opinions and market sentiment
+   - Access industry reports and competitive intelligence
+
+3. CHART GENERATION (JSON format):
    - Return chart data as structured JSON in your response
    - Frontend will render interactive charts using React charting library
    - Supports chart types: line, bar, area, pie, doughnut
    - Perfect for visualizing financial data and trends
 
-3. CODE INTERPRETER:
+4. CODE INTERPRETER:
    - Perform statistical analysis and financial calculations ONLY
    - Process and transform data AFTER fetching it from Alpha Vantage MCP tools
    - Build custom financial models and projections
@@ -353,13 +468,13 @@ YOUR CAPABILITIES:
    - Process and transform data for chart generation
    - Build custom financial models and projections
 
-4. LONG-TERM MEMORY:
+5. LONG-TERM MEMORY:
    - Your memory automatically learns and stores user investment preferences
    - You remember past investment decisions and portfolio positions
    - You recall user's risk tolerance, investment goals, and strategies
    - Memory persists across all conversations with this user
 
-5. INVESTMENT TRACKING & PERFORMANCE ANALYSIS:
+6. INVESTMENT TRACKING & PERFORMANCE ANALYSIS:
    - Record investments made based on your recommendations
    - Track transaction details (date, symbol, units, price)
    - Store forecast predictions (target price, timeframe, expected return)
@@ -608,13 +723,19 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
         alpha_vantage_client = create_alpha_vantage_mcp_client()
         logger.info("Alpha Vantage MCP client created successfully")
 
+        # Create Tavily MCP client for web search
+        logger.info("Creating Tavily MCP client...")
+        tavily_client = create_tavily_mcp_client()
+        logger.info("Tavily MCP client created successfully")
+
         # Create Investment Advisor agent with all tools
-        logger.info("Creating Investment Advisor agent with Alpha Vantage, Code Interpreter, and Investment Tracking...")
+        logger.info("Creating Investment Advisor agent with Alpha Vantage, Tavily, Code Interpreter, and Investment Tracking...")
         agent = Agent(
             name="InvestmentAdvisor",
             system_prompt=system_prompt,
             tools=[
                 alpha_vantage_client,  # Alpha Vantage financial tools
+                tavily_client,  # Tavily web search tools
                 code_tools.execute_python_securely,  # Code Interpreter for calculations
                 tracking_tools.record_investment,  # Investment tracking tools
                 tracking_tools.get_portfolio_performance,
@@ -628,7 +749,7 @@ risk tolerance, and financial goals. Past performance does not guarantee future 
                 "session.id": session_id,
             },
         )
-        logger.info("Investment Advisor agent created successfully with memory, financial tools, and investment tracking")
+        logger.info("Investment Advisor agent created successfully with memory, financial tools, web search, and investment tracking")
         return agent
 
     except Exception as e:
