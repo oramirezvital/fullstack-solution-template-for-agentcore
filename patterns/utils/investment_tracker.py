@@ -47,6 +47,7 @@ class InvestmentTracker:
         forecast_target_price: Optional[float] = None,
         forecast_timeframe_days: Optional[int] = None,
         session_id: Optional[str] = None,
+        transaction_date: Optional[str] = None,
     ) -> Dict:
         """
         Record a new investment transaction.
@@ -61,20 +62,38 @@ class InvestmentTracker:
             forecast_target_price: Predicted target price (optional)
             forecast_timeframe_days: Forecast timeframe in days (optional)
             session_id: Conversation session ID (optional)
+            transaction_date: Date of transaction in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS).
+                            Defaults to current date if not provided. (optional)
             
         Returns:
             Dict containing the created transaction record
             
         Raises:
-            ValueError: If required parameters are invalid
+            ValueError: If required parameters are invalid or date format is incorrect
         """
         if units <= 0:
             raise ValueError("Units must be greater than 0")
         if price_per_unit <= 0:
             raise ValueError("Price per unit must be greater than 0")
         
-        now = datetime.now(timezone.utc)
-        timestamp_str = now.isoformat()
+        # Use provided date or default to now
+        if transaction_date:
+            # Parse and validate the provided date
+            try:
+                # Handle both date-only and full timestamp formats
+                tx_date = datetime.fromisoformat(transaction_date.replace('Z', '+00:00'))
+                # Ensure timezone awareness
+                if tx_date.tzinfo is None:
+                    tx_date = tx_date.replace(tzinfo=timezone.utc)
+            except (ValueError, AttributeError) as e:
+                raise ValueError(
+                    f"Invalid transaction_date format: {transaction_date}. "
+                    "Use ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS)"
+                ) from e
+        else:
+            tx_date = datetime.now(timezone.utc)
+        
+        timestamp_str = tx_date.isoformat()
         
         # Generate unique IDs
         transaction_id = f"{timestamp_str}#{symbol}"
@@ -218,6 +237,59 @@ class InvestmentTracker:
         except Exception as e:
             logger.error("Failed to update position price: %s", e)
             raise RuntimeError(f"Failed to update position: {str(e)}") from e
+    
+    def delete_investment(
+        self,
+        user_id: str,
+        transaction_id: str,
+    ) -> Dict:
+        """
+        Delete an investment transaction.
+        
+        This permanently removes a transaction from the portfolio. Use with caution
+        as this action cannot be undone.
+        
+        Args:
+            user_id: Cognito user ID
+            transaction_id: Transaction ID to delete
+            
+        Returns:
+            Dict containing confirmation of deletion
+            
+        Raises:
+            ValueError: If transaction not found
+        """
+        try:
+            # First verify the transaction exists
+            response = self.table.get_item(
+                Key={"user_id": user_id, "transaction_id": transaction_id}
+            )
+            
+            if "Item" not in response:
+                raise ValueError(f"Transaction not found: {transaction_id}")
+            
+            item = response["Item"]
+            
+            # Delete the transaction
+            self.table.delete_item(
+                Key={"user_id": user_id, "transaction_id": transaction_id}
+            )
+            
+            logger.info(
+                "Deleted investment: user=%s, transaction_id=%s, symbol=%s",
+                user_id, transaction_id, item.get("symbol")
+            )
+            
+            return {
+                "status": "deleted",
+                "transaction_id": transaction_id,
+                "symbol": item.get("symbol"),
+                "message": f"Successfully deleted transaction {transaction_id}"
+            }
+            
+        except Exception as e:
+            logger.error("Failed to delete investment: %s", e)
+            raise RuntimeError(f"Failed to delete investment: {str(e)}") from e
     
     def get_active_positions(self, user_id: str) -> List[Dict]:
         """

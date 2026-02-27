@@ -261,6 +261,7 @@ class InvestmentTrackingTools:
         recommendation_reason: str,
         forecast_target_price: float = None,
         forecast_timeframe_days: int = None,
+        transaction_date: str = None,
     ) -> str:
         """
         Record a new investment transaction based on recommendation.
@@ -278,6 +279,8 @@ class InvestmentTrackingTools:
             recommendation_reason: Why you recommended this investment
             forecast_target_price: Your predicted target price (optional)
             forecast_timeframe_days: Forecast timeframe in days (optional)
+            transaction_date: Date of transaction in ISO format (YYYY-MM-DD or YYYY-MM-DDTHH:MM:SS).
+                            Defaults to current date if not provided. Use this for historical transactions. (optional)
             
         Returns:
             JSON string with transaction details
@@ -291,6 +294,7 @@ class InvestmentTrackingTools:
             recommendation_reason=recommendation_reason,
             forecast_target_price=forecast_target_price,
             forecast_timeframe_days=forecast_timeframe_days,
+            transaction_date=transaction_date,
         )
         return json.dumps(result, default=str)
     
@@ -338,6 +342,31 @@ class InvestmentTrackingTools:
             user_id=user_id,
             transaction_id=transaction_id,
             current_price=current_price
+        )
+        return json.dumps(result, default=str)
+    
+    @tool
+    def delete_investment(
+        self,
+        user_id: str,
+        transaction_id: str
+    ) -> str:
+        """
+        Delete an investment transaction from the portfolio.
+        
+        Use this tool when a user wants to remove an incorrect or unwanted transaction.
+        This permanently deletes the transaction and cannot be undone.
+        
+        Args:
+            user_id: User identifier
+            transaction_id: Transaction ID to delete (from get_portfolio_performance)
+            
+        Returns:
+            JSON string with deletion confirmation
+        """
+        result = self.tracker.delete_investment(
+            user_id=user_id,
+            transaction_id=transaction_id
         )
         return json.dumps(result, default=str)
     
@@ -451,7 +480,7 @@ def create_investment_advisor_agent(user_id: str, session_id: str) -> Agent:
 TOOLS AVAILABLE:
 • Alpha Vantage MCP (alphavantage_*): Stock quotes, indicators, fundamentals, earnings
 • Tavily MCP (tavily_*): Web search, news, analyst reports - ALWAYS cite sources with URLs
-• Investment tracking: record_investment, get_portfolio_performance, update_investment_price, compare_forecast_actual, export_portfolio_to_excel
+• Investment tracking: record_investment, get_portfolio_performance, update_investment_price, delete_investment, compare_forecast_actual, export_portfolio_to_excel
 • Charts: Return JSON in markdown code blocks (```json) for visualization (line, bar, area, pie)
 • Code Interpreter: Analysis ONLY - NO direct HTTP calls to Alpha Vantage
 
@@ -459,6 +488,7 @@ CRITICAL RULES:
 • ALWAYS use user_id {user_id} for investment tools
 • Use MCP tools (alphavantage_*, tavily_*) - NOT Code Interpreter for API calls
 • Memory persists across sessions - recall user preferences and past investments
+• Accept ALL dates as provided - do NOT assume future dates are typos (we are in February 2026)
 
 RESPONSE STYLE:
 • Be concise and direct (under 200 words unless asked for details)
@@ -470,8 +500,13 @@ WORKFLOWS:
 
 Investment Recording:
 1. Confirm: symbol, units, price, date, forecast (target price, timeframe, expected return)
-2. Call record_investment with all details
+2. Call record_investment with all details (include transaction_date for historical transactions)
 3. Acknowledge: "Recorded [X] shares of [SYMBOL] at $[price] on [date], total $[total]"
+
+Delete Transactions:
+1. Get current portfolio with get_portfolio_performance to see transaction_ids
+2. For each transaction to delete, call delete_investment(user_id, transaction_id)
+3. Confirm: "Deleted [X] transactions"
 
 Portfolio Performance:
 1. Call get_portfolio_performance
@@ -577,6 +612,7 @@ DISCLAIMER: Educational purposes only. Not personalized financial advice. Consul
                 tracking_tools.record_investment,  # Investment tracking tools
                 tracking_tools.get_portfolio_performance,
                 tracking_tools.update_investment_price,
+                tracking_tools.delete_investment,  # Delete transactions
                 tracking_tools.compare_forecast_actual,
                 tracking_tools.export_portfolio_to_excel,  # Excel export
             ],
