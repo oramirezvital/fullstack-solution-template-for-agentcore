@@ -1,6 +1,34 @@
 "use client"
 
-import { LineChart, Line, BarChart, Bar, AreaChart, Area, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts'
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler,
+  ChartOptions as ChartJSOptions
+} from 'chart.js'
+import { Line, Bar, Pie, Doughnut } from 'react-chartjs-2'
+
+// Register Chart.js components
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  PointElement,
+  LineElement,
+  BarElement,
+  ArcElement,
+  Title,
+  Tooltip,
+  Legend,
+  Filler
+)
 
 /**
  * Chart specification interface matching the backend format
@@ -32,39 +60,6 @@ interface ChartSpec {
 }
 
 /**
- * Transform chart data from backend format to Recharts format
- */
-function transformChartData(chartData: ChartData) {
-  const { labels, datasets } = chartData
-  
-  // For line, bar, area charts: transform to array of objects
-  if (datasets.length > 0 && datasets[0].data.length === labels.length) {
-    return labels.map((label, index) => {
-      const dataPoint: Record<string, string | number> = { name: label }
-      datasets.forEach(dataset => {
-        dataPoint[dataset.label] = dataset.data[index]
-      })
-      return dataPoint
-    })
-  }
-  
-  return []
-}
-
-/**
- * Transform data for pie/doughnut charts
- */
-function transformPieData(chartData: ChartData) {
-  const { labels, datasets } = chartData
-  const dataset = datasets[0] // Pie charts typically have one dataset
-  
-  return labels.map((label, index) => ({
-    name: label,
-    value: dataset.data[index]
-  }))
-}
-
-/**
  * Default colors for chart datasets
  */
 const DEFAULT_COLORS = [
@@ -79,22 +74,191 @@ const DEFAULT_COLORS = [
 ]
 
 /**
+ * Transform chart data from backend format to Chart.js format
+ * 
+ * @param chartData - Backend chart data format
+ * @param chartType - Type of chart being rendered
+ * @returns Chart.js compatible data object
+ */
+function transformToChartJsFormat(chartData: ChartData, chartType: string) {
+  const { labels, datasets } = chartData
+  
+  // For pie and doughnut charts
+  if (chartType === 'pie' || chartType === 'doughnut') {
+    const dataset = datasets[0] // Pie charts typically have one dataset
+    return {
+      labels,
+      datasets: [{
+        label: dataset.label,
+        data: dataset.data,
+        backgroundColor: labels.map((_, idx) => 
+          dataset.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length]
+        ),
+        borderColor: '#ffffff',
+        borderWidth: 2
+      }]
+    }
+  }
+  
+  // For line, bar, and area charts
+  return {
+    labels,
+    datasets: datasets.map((dataset, idx) => {
+      const color = dataset.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length]
+      
+      return {
+        label: dataset.label,
+        data: dataset.data,
+        backgroundColor: chartType === 'area' ? `${color}4D` : color, // 30% opacity for area
+        borderColor: color,
+        borderWidth: 2,
+        fill: chartType === 'area',
+        tension: 0.4, // Smooth curves for line/area charts
+        pointRadius: 4,
+        pointHoverRadius: 6
+      }
+    })
+  }
+}
+
+/**
+ * Get Chart.js options configuration
+ * 
+ * @param options - Chart options from backend
+ * @returns Chart.js options object
+ */
+function getChartOptions(options: ChartOptions): ChartJSOptions {
+  const { yAxisLabel, xAxisLabel, showLegend = true, showGrid = true } = options
+  
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: showLegend,
+        position: 'top' as const,
+        labels: {
+          color: '#6b7280',
+          font: {
+            size: 12
+          }
+        }
+      },
+      title: {
+        display: false // We render title separately for better styling control
+      },
+      tooltip: {
+        backgroundColor: 'white',
+        titleColor: '#1f2937',
+        bodyColor: '#1f2937',
+        borderColor: '#e5e7eb',
+        borderWidth: 1,
+        padding: 12,
+        displayColors: true,
+        boxPadding: 6
+      }
+    },
+    scales: {
+      x: {
+        display: true,
+        title: {
+          display: !!xAxisLabel,
+          text: xAxisLabel || '',
+          color: '#6b7280',
+          font: {
+            size: 12
+          }
+        },
+        grid: {
+          display: showGrid,
+          color: '#e5e7eb'
+        },
+        ticks: {
+          color: '#6b7280',
+          font: {
+            size: 12
+          }
+        }
+      },
+      y: {
+        display: true,
+        title: {
+          display: !!yAxisLabel,
+          text: yAxisLabel || '',
+          color: '#6b7280',
+          font: {
+            size: 12
+          }
+        },
+        grid: {
+          display: showGrid,
+          color: '#e5e7eb'
+        },
+        ticks: {
+          color: '#6b7280',
+          font: {
+            size: 12
+          }
+        }
+      }
+    }
+  }
+}
+
+/**
+ * Get Chart.js options for pie/doughnut charts
+ * 
+ * @param options - Chart options from backend
+ * @returns Chart.js options object for pie/doughnut
+ */
+function getPieChartOptions(options: ChartOptions): ChartJSOptions {
+  const { showLegend = true } = options
+  
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    plugins: {
+      legend: {
+        display: showLegend,
+        position: 'right' as const,
+        labels: {
+          color: '#6b7280',
+          font: {
+            size: 12
+          },
+          padding: 15
+        }
+      },
+      tooltip: {
+        backgroundColor: 'white',
+        titleColor: '#1f2937',
+        bodyColor: '#1f2937',
+        borderColor: '#e5e7eb',
+        borderWidth: 1,
+        padding: 12
+      }
+    }
+  }
+}
+
+/**
  * ChartRenderer Component
  * 
- * Renders interactive charts using Recharts library based on JSON data
+ * Renders interactive charts using Chart.js library based on JSON data
  * from the agent's response.
+ * 
+ * @param chartSpec - Chart specification from backend
  */
 export function ChartRenderer({ chartSpec }: { chartSpec: ChartSpec }) {
   const { chartType, title, data, options = {} } = chartSpec
-  const { yAxisLabel, xAxisLabel, showLegend = true, showGrid = true } = options
   
-  // Transform data based on chart type
-  const chartData = chartType === 'pie' || chartType === 'doughnut' 
-    ? transformPieData(data)
-    : transformChartData(data)
+  // Transform data to Chart.js format
+  const chartData = transformToChartJsFormat(data, chartType)
   
-  // Get colors for datasets
-  const colors = data.datasets.map((ds, idx) => ds.color || DEFAULT_COLORS[idx % DEFAULT_COLORS.length])
+  // Get appropriate options based on chart type
+  const chartOptions = (chartType === 'pie' || chartType === 'doughnut')
+    ? getPieChartOptions(options)
+    : getChartOptions(options)
   
   return (
     <div className="my-4 bg-white dark:bg-gray-800 p-6 rounded-lg border border-gray-200 dark:border-gray-700 shadow-sm">
@@ -104,136 +268,27 @@ export function ChartRenderer({ chartSpec }: { chartSpec: ChartSpec }) {
       </h3>
       
       {/* Chart Container */}
-      <ResponsiveContainer width="100%" height={400}>
+      <div style={{ height: '400px', width: '100%' }}>
         {chartType === 'line' && (
-          <LineChart data={chartData}>
-            {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />}
-            <XAxis 
-              dataKey="name" 
-              label={xAxisLabel ? { value: xAxisLabel, position: 'insideBottom', offset: -5 } : undefined}
-              tick={{ fontSize: 12 }}
-            />
-            <YAxis 
-              label={yAxisLabel ? { value: yAxisLabel, angle: -90, position: 'insideLeft' } : undefined}
-              tick={{ fontSize: 12 }}
-            />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: 'white', 
-                border: '1px solid #e5e7eb',
-                borderRadius: '6px',
-                fontSize: '12px'
-              }}
-            />
-            {showLegend && <Legend wrapperStyle={{ fontSize: '12px' }} />}
-            {data.datasets.map((dataset, idx) => (
-              <Line
-                key={dataset.label}
-                type="monotone"
-                dataKey={dataset.label}
-                stroke={colors[idx]}
-                strokeWidth={2}
-                dot={{ r: 4 }}
-                activeDot={{ r: 6 }}
-              />
-            ))}
-          </LineChart>
+          <Line data={chartData} options={chartOptions as any} />
         )}
         
         {chartType === 'bar' && (
-          <BarChart data={chartData}>
-            {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />}
-            <XAxis 
-              dataKey="name"
-              label={xAxisLabel ? { value: xAxisLabel, position: 'insideBottom', offset: -5 } : undefined}
-              tick={{ fontSize: 12 }}
-            />
-            <YAxis 
-              label={yAxisLabel ? { value: yAxisLabel, angle: -90, position: 'insideLeft' } : undefined}
-              tick={{ fontSize: 12 }}
-            />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: 'white', 
-                border: '1px solid #e5e7eb',
-                borderRadius: '6px',
-                fontSize: '12px'
-              }}
-            />
-            {showLegend && <Legend wrapperStyle={{ fontSize: '12px' }} />}
-            {data.datasets.map((dataset, idx) => (
-              <Bar
-                key={dataset.label}
-                dataKey={dataset.label}
-                fill={colors[idx]}
-              />
-            ))}
-          </BarChart>
+          <Bar data={chartData} options={chartOptions as any} />
         )}
         
         {chartType === 'area' && (
-          <AreaChart data={chartData}>
-            {showGrid && <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />}
-            <XAxis 
-              dataKey="name"
-              label={xAxisLabel ? { value: xAxisLabel, position: 'insideBottom', offset: -5 } : undefined}
-              tick={{ fontSize: 12 }}
-            />
-            <YAxis 
-              label={yAxisLabel ? { value: yAxisLabel, angle: -90, position: 'insideLeft' } : undefined}
-              tick={{ fontSize: 12 }}
-            />
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: 'white', 
-                border: '1px solid #e5e7eb',
-                borderRadius: '6px',
-                fontSize: '12px'
-              }}
-            />
-            {showLegend && <Legend wrapperStyle={{ fontSize: '12px' }} />}
-            {data.datasets.map((dataset, idx) => (
-              <Area
-                key={dataset.label}
-                type="monotone"
-                dataKey={dataset.label}
-                stroke={colors[idx]}
-                fill={colors[idx]}
-                fillOpacity={0.3}
-              />
-            ))}
-          </AreaChart>
+          <Line data={chartData} options={chartOptions as any} />
         )}
         
-        {(chartType === 'pie' || chartType === 'doughnut') && (
-          <PieChart>
-            <Pie
-              data={chartData}
-              cx="50%"
-              cy="50%"
-              labelLine={true}
-              label={(entry) => `${entry.name}: ${entry.value}`}
-              outerRadius={chartType === 'doughnut' ? 120 : 140}
-              innerRadius={chartType === 'doughnut' ? 60 : 0}
-              fill="#8884d8"
-              dataKey="value"
-            >
-              {chartData.map((_entry, index) => (
-                <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-              ))}
-            </Pie>
-            <Tooltip 
-              contentStyle={{ 
-                backgroundColor: 'white', 
-                border: '1px solid #e5e7eb',
-                borderRadius: '6px',
-                fontSize: '12px'
-              }}
-            />
-            {showLegend && <Legend wrapperStyle={{ fontSize: '12px' }} />}
-          </PieChart>
+        {chartType === 'pie' && (
+          <Pie data={chartData} options={chartOptions as any} />
         )}
-      </ResponsiveContainer>
+        
+        {chartType === 'doughnut' && (
+          <Doughnut data={chartData} options={chartOptions as any} />
+        )}
+      </div>
     </div>
   )
 }
