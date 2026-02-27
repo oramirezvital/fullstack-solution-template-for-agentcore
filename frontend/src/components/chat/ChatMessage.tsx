@@ -1,7 +1,7 @@
 "use client"
 
 import { useState } from "react"
-import { ThumbsUp, ThumbsDown, Bot, User, Download } from "lucide-react"
+import { ThumbsUp, ThumbsDown, User, Download } from "lucide-react"
 import { Message } from "./types"
 import { FeedbackDialog } from "./FeedbackDialog"
 import { getToolRenderer } from "@/hooks/useToolRenderer"
@@ -126,7 +126,15 @@ export function ChatMessage({ message, sessionId: _sessionId, onFeedbackSubmit }
     <div className={`flex gap-3 mb-6 animate-fade-in ${message.role === "user" ? "flex-row-reverse" : "flex-row"}`}>
       {/* Avatar */}
       <div className={`avatar ${message.role === "user" ? "avatar-user" : "avatar-assistant"} shadow-md`}>
-        {message.role === "user" ? <User size={18} /> : <Bot size={18} />}
+        {message.role === "user" ? (
+          <User size={24} />
+        ) : (
+          <img 
+            src="/munger.jpg" 
+            alt="Charlie Munger" 
+            className="w-full h-full object-cover rounded-full"
+          />
+        )}
       </div>
 
       {/* Message content */}
