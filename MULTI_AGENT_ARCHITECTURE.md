@@ -39,7 +39,7 @@ PATH     ┌──────────────────────�
 ## Agents
 
 ### 1. Orchestrator Agent
-- **Model**: Claude 3.7 Sonnet (`us.anthropic.claude-3-7-sonnet-20250219-v1:0`)
+- **Model**: Claude Sonnet 4.6 (`us.anthropic.claude-sonnet-4-6`)
 - **Temperature**: 0.1
 - **Role**: Routes queries to the appropriate path (direct or analysis pipeline)
 - **Tools**: 
@@ -49,28 +49,28 @@ PATH     ┌──────────────────────�
   - `run_investment_analysis` - triggers ReWOO pipeline
 
 ### 2. Market Data Agent
-- **Model**: Claude 3.7 Sonnet
+- **Model**: Claude Sonnet 4.6
 - **Temperature**: 0.0 (deterministic data retrieval)
 - **Role**: Fetches real-time quotes, OHLCV, technical indicators, fundamentals
 - **Tools**: Alpha Vantage MCP (100+ financial data endpoints)
 - **Instantiation**: Lazy (created only when planner selects it)
 
 ### 3. Research Agent
-- **Model**: Claude 3.7 Sonnet
+- **Model**: Claude Sonnet 4.6
 - **Temperature**: 0.1 (slight creativity for synthesis)
 - **Role**: Searches news, analyst reports, SEC filings, competitive intelligence
 - **Tools**: Tavily MCP (web search with source citations)
 - **Instantiation**: Lazy (created only when planner selects it)
 
 ### 4. Portfolio Agent
-- **Model**: Claude 3.7 Sonnet
+- **Model**: Claude Sonnet 4.6
 - **Temperature**: 0.0 (deterministic portfolio operations)
 - **Role**: Records, views, updates, deletes, and exports investment transactions
 - **Tools**: DynamoDB investment tracker (6 operations)
 - **Instantiation**: Eager (always available for direct orchestrator calls)
 
 ### 5. Valuation Agent
-- **Model**: Claude 3.7 Sonnet
+- **Model**: Claude Sonnet 4.6
 - **Temperature**: 0.1 (NOT 1 - avoids extended thinking latency)
 - **Role**: DCF models, ratio analysis, margin of safety, mental models application
 - **Tools**: Code Interpreter (secure Python sandbox)
@@ -237,6 +237,6 @@ CloudWatch logs show agent routing decisions:
 ---
 
 **Deployed**: 2026-03-02
-**Model**: Claude 3.7 Sonnet (us.anthropic.claude-3-7-sonnet-20250219-v1:0)
+**Model**: Claude Sonnet 4.6 (us.anthropic.claude-sonnet-4-6)
 **Pattern**: Hybrid ReWOO + Agents-as-Tools
 **Status**: ✅ Production

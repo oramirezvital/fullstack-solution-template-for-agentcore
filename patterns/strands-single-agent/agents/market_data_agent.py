@@ -15,8 +15,9 @@ from strands.tools.mcp import MCPClient
 
 logger = logging.getLogger(__name__)
 
-# Most advanced model available on Bedrock (Claude 3.7 Sonnet - hybrid reasoning)
-MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+# Most advanced model available on Bedrock (Claude Sonnet 4.6)
+# Uses Inference Profile for cross-region routing
+MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 
 SYSTEM_PROMPT = """You are a Market Data Specialist with deep expertise in financial market data.
 

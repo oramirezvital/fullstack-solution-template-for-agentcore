@@ -15,6 +15,7 @@ to avoid paying initialization cost for agents that aren't needed.
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Optional
 
 from strands import Agent, tool
@@ -22,8 +23,9 @@ from strands.models import BedrockModel
 
 logger = logging.getLogger(__name__)
 
-# Most advanced model available on Bedrock (Claude 3.7 Sonnet - hybrid reasoning)
-MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+# Most advanced model available on Bedrock (Claude Sonnet 4.6)
+# Uses Inference Profile for cross-region routing
+MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 
 # ---------------------------------------------------------------------------
 # System prompts
@@ -31,6 +33,9 @@ MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
 
 ORCHESTRATOR_PROMPT = """You are a senior Investment Advisor powered by Charlie Munger's mental models.
 User ID: {user_id}
+
+CURRENT DATE: {current_date}
+IMPORTANT: We are currently in {current_year}. Always use this year when searching for news, data, and making recommendations.
 
 You coordinate a team of specialist agents. Route every query through the correct path:
 
@@ -80,6 +85,9 @@ DISCLAIMER: Educational purposes only. Not personalized financial advice.
 PLANNER_PROMPT = """You are an investment analysis planner. Given a user query, produce a concise
 execution plan listing ONLY the agents needed and what to ask each one.
 
+CURRENT DATE: {current_date}
+IMPORTANT: We are currently in {current_year}. When requesting data or news, always specify the current year.
+
 AVAILABLE AGENTS:
 - market_data: real-time quotes, OHLCV, RSI/MACD/Bollinger, fundamentals, earnings
 - research: news, analyst reports, SEC filings, competitive intelligence
@@ -102,6 +110,9 @@ RULES:
 
 SYNTHESIZER_PROMPT = """You are Charlie Munger's Investment Advisor synthesizing specialist analysis
 into a final investment recommendation.
+
+CURRENT DATE: {current_date}
+IMPORTANT: We are currently in {current_year}. Use this context when evaluating data and making recommendations.
 
 MANDATORY: Apply ALL relevant mental models explicitly in your synthesis:
 
@@ -159,6 +170,11 @@ class InvestmentAnalysisPipeline:
         self._tavily_api_key = tavily_api_key
         self._region = region
 
+        # Get current date for all agents
+        now = datetime.utcnow()
+        self._current_date = now.strftime("%B %d, %Y")  # e.g., "March 02, 2026"
+        self._current_year = str(now.year)
+
         # Lazy-initialized agent cache - created only when first needed
         self._market_data_agent: Optional[Agent] = None
         self._research_agent: Optional[Agent] = None
@@ -167,13 +183,19 @@ class InvestmentAnalysisPipeline:
         # Planner and synthesizer are always needed - create upfront
         self._planner = Agent(
             name="AnalysisPlanner",
-            system_prompt=PLANNER_PROMPT,
+            system_prompt=PLANNER_PROMPT.format(
+                current_date=self._current_date,
+                current_year=self._current_year,
+            ),
             tools=[],  # Planner only reasons - no tools needed
             model=BedrockModel(model_id=MODEL_ID, temperature=0.0),
         )
         self._synthesizer = Agent(
             name="AnalysisSynthesizer",
-            system_prompt=SYNTHESIZER_PROMPT,
+            system_prompt=SYNTHESIZER_PROMPT.format(
+                current_date=self._current_date,
+                current_year=self._current_year,
+            ),
             tools=[],  # Synthesizer only reasons - no tools needed
             model=BedrockModel(model_id=MODEL_ID, temperature=0.1),
         )
@@ -413,6 +435,11 @@ def create_orchestrator_agent(
 
     logger.info("Initializing orchestrator for user: %s", user_id)
 
+    # Get current date for all agents
+    now = datetime.utcnow()
+    current_date = now.strftime("%B %d, %Y")  # e.g., "March 02, 2026"
+    current_year = str(now.year)
+
     # Create the analysis pipeline (sub-agents are lazy inside it)
     pipeline = InvestmentAnalysisPipeline(
         alpha_vantage_api_key=alpha_vantage_api_key,
@@ -507,7 +534,11 @@ def create_orchestrator_agent(
         # Run the async pipeline from a sync context
         return asyncio.run(pipeline.run(user_query=query))
 
-    system_prompt = ORCHESTRATOR_PROMPT.format(user_id=user_id)
+    system_prompt = ORCHESTRATOR_PROMPT.format(
+        user_id=user_id,
+        current_date=current_date,
+        current_year=current_year,
+    )
 
     orchestrator = Agent(
         name="InvestmentAdvisorOrchestrator",

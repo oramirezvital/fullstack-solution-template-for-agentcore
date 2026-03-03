@@ -30,6 +30,16 @@ export default function ChatInterface() {
   // Ref for message container to enable auto-scrolling
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // Monitor authentication state and handle token expiration
+  useEffect(() => {
+    // Check if user is authenticated but token is expired
+    if (auth.user && auth.user.expired) {
+      console.log("Token expired detected - redirecting to sign in")
+      auth.removeUser()
+      auth.signinRedirect()
+    }
+  }, [auth])
+
   // Register default tool renderer (wildcard "*")
   useDefaultTool(({ name, args, status, result }) => (
     <ToolCallDisplay name={name} args={args} status={status} result={result} />
@@ -205,6 +215,15 @@ export default function ChatInterface() {
       )
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : "Unknown error"
+      
+      // Check for token expiration (HTTP 401)
+      if (errorMessage.includes("HTTP 401") || errorMessage.includes("Token has expired")) {
+        console.log("Token expired - signing out and redirecting to login")
+        // Sign out and redirect to login page
+        auth.removeUser()
+        auth.signinRedirect()
+        return
+      }
       
       // Provide user-friendly error messages based on error type
       let userMessage = "I apologize, but I encountered an error processing your request."

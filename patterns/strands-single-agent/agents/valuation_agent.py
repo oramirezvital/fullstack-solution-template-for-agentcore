@@ -16,7 +16,8 @@ logger = logging.getLogger(__name__)
 # NOTE: temperature=0.1 (NOT 1) - temperature=1 triggers extended thinking which
 # adds 60-120s latency. Explicit reasoning instructions in the prompt achieve the
 # same quality without the latency penalty.
-MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+# Claude Sonnet 4.6 uses Inference Profile for cross-region routing
+MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 
 SYSTEM_PROMPT = """You are a Quantitative Valuation Specialist applying Charlie Munger's mental models to investment analysis.
 

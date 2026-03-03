@@ -6,6 +6,7 @@ SEC filings, earnings call transcripts, and market sentiment analysis.
 """
 
 import logging
+from datetime import datetime
 
 from mcp.client.streamable_http import streamablehttp_client
 from strands import Agent
@@ -14,10 +15,14 @@ from strands.tools.mcp import MCPClient
 
 logger = logging.getLogger(__name__)
 
-# Most advanced model available on Bedrock (Claude 3.7 Sonnet - hybrid reasoning)
-MODEL_ID = "us.anthropic.claude-3-7-sonnet-20250219-v1:0"
+# Most advanced model available on Bedrock (Claude Sonnet 4.6)
+# Uses Inference Profile for cross-region routing
+MODEL_ID = "us.anthropic.claude-sonnet-4-6"
 
 SYSTEM_PROMPT = """You are an Investment Research Specialist with expertise in financial intelligence gathering.
+
+CURRENT DATE: {current_date}
+IMPORTANT: We are currently in {current_year}. Always search for news and data from the current year.
 
 Your sole responsibility is to find, retrieve, and summarize relevant research, news, and qualitative information.
 
@@ -78,6 +83,11 @@ def create_research_agent(tavily_api_key: str) -> Agent:
 
     logger.info("Creating Research Agent with Tavily MCP...")
 
+    # Get current date for system prompt
+    now = datetime.utcnow()
+    current_date = now.strftime("%B %d, %Y")
+    current_year = str(now.year)
+
     # Tavily MCP server URL - note: uses 'tavilyApiKey' parameter (not 'apikey')
     tavily_url = f"https://mcp.tavily.com/mcp/?tavilyApiKey={tavily_api_key}"
 
@@ -97,7 +107,10 @@ def create_research_agent(tavily_api_key: str) -> Agent:
 
     agent = Agent(
         name="ResearchAgent",
-        system_prompt=SYSTEM_PROMPT,
+        system_prompt=SYSTEM_PROMPT.format(
+            current_date=current_date,
+            current_year=current_year,
+        ),
         tools=[tavily_client],
         model=bedrock_model,
     )
